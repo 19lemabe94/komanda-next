@@ -1,58 +1,36 @@
-# 🍺 Komanda App (V2) - MVP
+This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
-Sistema web para gestão de comandas em tempo real, focado em agilidade e persistência de dados.
+## Getting Started
 
-## 🚀 Tecnologias (Stack Gratuita)
+First, run the development server:
 
-* **Frontend:** [Next.js](https://nextjs.org/) (React)
-* **Estilização:** [Tailwind CSS](https://tailwindcss.com/)
-* **Backend/Banco:** [Supabase](https://supabase.com/) (PostgreSQL + Auth + Realtime)
-* **Hospedagem:** Vercel
+```bash
+npm run dev
+# or
+yarn dev
+# or
+pnpm dev
+# or
+bun dev
+```
 
-## 🎯 Objetivo do MVP
+Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-Criar um sistema funcional para substituir o papel, permitindo controle de mesas, vendas e fiados, operado por um Admin/Caixa.
+You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
-## ⚠️ Regras de Ouro (Business Logic)
+This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
-1.  **Venda Fiado "Inflacionária":**
-    * Ao fechar uma conta como "Fiado", o sistema registra os itens.
-    * Porém, **o valor da dívida é dinâmico**: Se o preço da cerveja aumentar no cadastro de produtos, a dívida de quem comprou essa cerveja fiado no passado aumenta também. O valor a ser pago é sempre baseado no preço **atual** do dia do pagamento, não do dia do consumo.
-2.  **Identificação Obrigatória:**
-    * Vendas "Fiado" exigem obrigatoriamente a seleção de um **Cliente Cadastrado**.
-3.  **Tempo Real:**
-    * O status das mesas (Livre/Ocupada) deve atualizar instantaneamente em todas as telas conectadas.
+## Learn More
 
-## 🗃️ Modelo de Dados (Supabase)
+To learn more about Next.js, take a look at the following resources:
 
-* **`users`**: Autenticação do sistema.
-* **`clientes`**: (Nome, Telefone). Essencial para o Fiado.
-* **`produtos`**: (Nome, Preço Atual, Categoria).
-* **`comandas`**: (Mesa 0-15, Status, Cliente Vinculado).
-* **`itens_comanda`**: (Produto, Quantidade).
-* **`vendas`**: Registro do fechamento (Data, Forma Pagamento).
+- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
+- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
 
-## 📋 Backlog (Sprint 1)
+You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
 
-### Configuração
-- [ ] Criar projeto no Supabase & Configurar tabelas.
-- [ ] Iniciar projeto Next.js com Tailwind.
-- [ ] Configurar variáveis de ambiente (.env).
+## Deploy on Vercel
 
-### Funcionalidades
-- [ ] **Auth:** Tela de Login simples.
-- [ ] **Admin:** CRUD de Produtos (Criar e editar preços).
-- [ ] **Admin:** CRUD de Clientes.
-- [ ] **Dashboard:** Grid de Mesas (0-15) com status visual.
-- [ ] **Fluxo:** Abrir Comanda -> Lançar Itens -> Fechar Comanda.
-- [ ] **Checkout:**
-    - [ ] Pagamento Dinheiro/Cartão (Preço fixo).
-    - [ ] Pagamento Fiado (Vínculo com cliente).
-- [ ] **Relatórios:** Tela de "Vendas do Dia" e "Dívidas em Aberto" (com cálculo atualizado).
+The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
-## 🛠️ Como rodar
-
-1. Clone o repo
-2. `npm install`
-3. Crie o arquivo `.env.local` com as chaves do Supabase.
-4. `npm run dev`
+Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
