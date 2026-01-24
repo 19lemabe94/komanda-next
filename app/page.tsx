@@ -4,6 +4,7 @@ import { supabase } from './lib/supabaseClient'
 import { useRouter } from 'next/navigation'
 import { colors, globalStyles } from './styles/theme'
 import { BrandLogo } from './components/BrandLogo'
+import { OrderDetailsModal } from './components/OrderDetailsModal'
 
 // Tipo alinhado com o banco de dados
 type Order = {
@@ -18,32 +19,30 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [orders, setOrders] = useState<Order[]>([])
   
-  // Estados do Modal de Nova Mesa
-  const [isModalOpen, setIsModalOpen] = useState(false)
+  // Controle do Modal de Detalhes (Pai e Filho)
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
+
+  // Controle do Modal de Nova Mesa
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [newLabel, setNewLabel] = useState('')
   const [creating, setCreating] = useState(false)
-  const [feedback, setFeedback] = useState('') // Para erros (ex: mesa já existe)
+  const [feedback, setFeedback] = useState('')
 
   // Dados do Usuário
   const [userRole, setUserRole] = useState<string | null>(null)
-  const [userEmail, setUserEmail] = useState<string>('')
 
   useEffect(() => {
     checkSessionAndFetch()
   }, [])
 
-  // 1. Verifica sessão e busca dados iniciais
   const checkSessionAndFetch = async () => {
     const { data: { session } } = await supabase.auth.getSession()
-    
     if (!session) {
       router.push('/login')
       return
     }
-
-    setUserEmail(session.user.email || '')
     
-    // Busca Role
+    // Busca cargo do usuário (admin ou funcionario)
     const { data: profile } = await supabase
       .from('profiles')
       .select('role')
@@ -51,13 +50,12 @@ export default function Dashboard() {
       .single()
     if (profile) setUserRole(profile.role)
 
-    // Busca Comandas Ativas
     await fetchOrders()
     setLoading(false)
   }
 
-  // 2. Busca apenas mesas Abertas ou em Pagamento
   const fetchOrders = async () => {
+    // Busca apenas as ativas (aberta ou pagamento)
     const { data, error } = await supabase
       .from('orders')
       .select('*')
@@ -68,32 +66,54 @@ export default function Dashboard() {
     else setOrders(data || [])
   }
 
-  // 3. Lógica inteligente para sugerir nome da mesa
+  // --- ABRIR DETALHES DA MESA ---
+  const handleOpenOrder = (order: Order) => {
+    setSelectedOrder(order)
+  }
+
+  // --- LÓGICA DE EXCLUSÃO (HARD DELETE) ---
+  const handleDeleteOrder = async (e: React.MouseEvent, id: string, label: string, total: number) => {
+    e.stopPropagation() // Impede que abra o modal de detalhes ao clicar na lixeira
+
+    // REGRA: Só pede confirmação se tiver consumo (> 0)
+    if (total > 0) {
+        const confirm = window.confirm(`ATENÇÃO: A mesa "${label}" tem R$ ${total.toFixed(2)} em consumo.\nDeseja realmente excluir e perder estes dados?`)
+        if (!confirm) return
+    }
+
+    // Apaga do banco de dados
+    const { error } = await supabase
+      .from('orders')
+      .delete()
+      .eq('id', id)
+
+    if (error) {
+      alert('Erro ao excluir: ' + error.message)
+    } else {
+      // Remove da tela instantaneamente
+      setOrders(current => current.filter(order => order.id !== id))
+    }
+  }
+
+  // --- NOVA MESA ---
   const openNewOrderModal = () => {
     setFeedback('')
-    // Tenta encontrar o próximo número disponível
-    // Filtra apenas labels que são números
-    const numbers = orders
-      .map(o => parseInt(o.label))
-      .filter(n => !isNaN(n))
-    
+    // Lógica inteligente para sugerir o próximo número
+    const numbers = orders.map(o => parseInt(o.label)).filter(n => !isNaN(n))
     const nextNum = numbers.length > 0 ? Math.max(...numbers) + 1 : 1
     setNewLabel(nextNum.toString())
-    
-    setIsModalOpen(true)
-    // Pequeno hack para focar no input assim que o modal abre
+    setIsCreateModalOpen(true)
     setTimeout(() => document.getElementById('newOrderInput')?.focus(), 100)
   }
 
-  // 4. Cria a comanda no banco
   const handleCreateOrder = async (e: FormEvent) => {
     e.preventDefault()
     if (!newLabel.trim()) return
 
     setCreating(true)
-    const labelFinal = newLabel.trim().toLowerCase() // Padroniza tudo minúsculo
+    const labelFinal = newLabel.trim().toLowerCase()
 
-    // Verifica duplicidade localmente antes de ir ao banco (UX mais rápida)
+    // Verifica duplicidade localmente (UX rápida)
     const exists = orders.find(o => o.label.toLowerCase() === labelFinal)
     if (exists) {
       setFeedback(`A mesa "${labelFinal}" já está aberta!`)
@@ -112,17 +132,16 @@ export default function Dashboard() {
     if (error) {
       setFeedback('Erro ao criar: ' + error.message)
     } else {
-      setIsModalOpen(false)
-      fetchOrders() // Atualiza a lista
+      setIsCreateModalOpen(false)
+      fetchOrders()
     }
     setCreating(false)
   }
 
-  // Helpers de Estilo
   const getStatusStyle = (status: string) => {
     switch (status) {
-      case 'pagamento': return { bg: '#fffbeb', border: '#d97706', text: '#b45309' } // Amarelo
-      default: return { bg: 'white', border: colors.border, text: colors.primary } // Padrão
+      case 'pagamento': return { bg: '#fffbeb', border: '#d97706', text: '#b45309' }
+      default: return { bg: 'white', border: colors.border, text: colors.primary }
     }
   }
 
@@ -137,6 +156,7 @@ export default function Dashboard() {
         padding: '0 20px', height: '70px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         boxShadow: '0 2px 4px rgba(0,0,0,0.02)'
       }}>
+        {/* Logo e Título */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
           <BrandLogo size={36} color={colors.primary} />
           <div style={{ lineHeight: 1 }}>
@@ -145,28 +165,69 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: '15px' }}>
+        {/* Botões de Navegação */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          
+          {/* Botão RELATÓRIOS */}
+          <button 
+            onClick={() => router.push('/reports')}
+            style={{
+              background: 'white', border: `1px solid ${colors.border}`, borderRadius: '6px',
+              padding: '8px 16px', color: colors.text, fontSize: '0.85rem', fontWeight: 600,
+              cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px'
+            }}
+          >
+            📈 Relatórios
+          </button>
+
+          {/* Botão CARDÁPIO */}
+          <button 
+            onClick={() => router.push('/products')}
+            style={{
+              background: 'white', border: `1px solid ${colors.border}`, borderRadius: '6px',
+              padding: '8px 16px', color: colors.text, fontSize: '0.85rem', fontWeight: 600,
+              cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px'
+            }}
+          >
+            🍔 Cardápio
+          </button>
+
+          {/* Botão EQUIPE (Apenas Admin) */}
           {userRole === 'admin' && (
-            <button onClick={() => router.push('/squad')} style={{ border: `1px solid ${colors.border}`, background: 'white', padding: '8px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem' }}>
+            <button 
+              onClick={() => router.push('/squad')}
+              style={{
+                background: 'white', border: `1px solid ${colors.border}`, borderRadius: '6px',
+                padding: '8px 16px', color: colors.text, fontSize: '0.85rem', fontWeight: 600,
+                cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px'
+              }}
+            >
               👥 Equipe
             </button>
           )}
-          <button onClick={async () => { await supabase.auth.signOut(); router.push('/login') }} style={{ backgroundColor: colors.errorBg, color: colors.errorText, border: 'none', padding: '8px 12px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.85rem' }}>
+
+          {/* Botão SAIR */}
+          <button 
+            onClick={async () => { await supabase.auth.signOut(); router.push('/login') }}
+            style={{
+              backgroundColor: colors.errorBg, color: colors.errorText, border: 'none',
+              padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold',
+              fontSize: '0.85rem', marginLeft: '8px'
+            }}
+          >
             Sair
           </button>
         </div>
       </header>
 
-      {/* CONTEÚDO */}
+      {/* CONTEÚDO PRINCIPAL */}
       <main style={{ width: '100%', maxWidth: '1200px', padding: '30px 20px', flex: 1 }}>
         
-        <div style={{ marginBottom: '25px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-          <div>
+        <div style={{ marginBottom: '25px' }}>
             <h2 style={{ fontSize: '1.5rem', color: colors.text, margin: 0 }}>Comandas Ativas</h2>
             <p style={{ margin: '5px 0 0', color: colors.textMuted, fontSize: '0.9rem' }}>
-              Gerencie as mesas e consumos em tempo real
+              Selecione uma mesa para adicionar pedidos
             </p>
-          </div>
         </div>
 
         {/* GRID DINÂMICO */}
@@ -176,13 +237,12 @@ export default function Dashboard() {
           gap: '20px' 
         }}>
           
-          {/* 1. CARD DE ADICIONAR (Sempre o primeiro) */}
+          {/* BOTÃO + NOVA MESA */}
           <div 
             onClick={openNewOrderModal}
             style={{
               height: '140px',
-              border: `2px dashed ${colors.border}`,
-              borderRadius: '12px',
+              border: `2px dashed ${colors.border}`, borderRadius: '12px',
               display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
               cursor: 'pointer', backgroundColor: 'rgba(255,255,255,0.5)',
               transition: 'all 0.2s', color: colors.textMuted
@@ -194,12 +254,13 @@ export default function Dashboard() {
             <span style={{ fontSize: '0.9rem', fontWeight: 600 }}>Nova Mesa</span>
           </div>
 
-          {/* 2. LISTA DE COMANDAS DO BANCO */}
+          {/* CARDS DAS MESAS */}
           {orders.map((order) => {
             const style = getStatusStyle(order.status)
             return (
               <div 
                 key={order.id}
+                onClick={() => handleOpenOrder(order)} // <--- CLIQUE ABRE O MODAL GRANDE
                 style={{
                   backgroundColor: style.bg,
                   border: `2px solid ${style.border}`,
@@ -207,25 +268,48 @@ export default function Dashboard() {
                   cursor: 'pointer', height: '140px',
                   display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
                   boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)',
-                  position: 'relative'
+                  position: 'relative',
+                  transition: 'transform 0.1s'
                 }}
               >
+                
+                {/* CABEÇALHO: Nome + Lixeira */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                   <span style={{ 
                     fontSize: '1.1rem', fontWeight: 800, color: colors.text, 
-                    textTransform: 'capitalize', // Deixa primeira letra maiúscula (arvore -> Arvore)
-                    wordBreak: 'break-word', lineHeight: 1.2
+                    textTransform: 'capitalize', wordBreak: 'break-word', lineHeight: 1.2
                   }}>
                     {order.label}
                   </span>
+
+                  {/* ÍCONE DE EXCLUSÃO */}
+                  <div 
+                    onClick={(e) => handleDeleteOrder(e, order.id, order.label, order.total)}
+                    title="Excluir Mesa"
+                    style={{
+                        padding: '6px', marginTop: '-6px', marginRight: '-6px',
+                        cursor: 'pointer', borderRadius: '50%',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        color: '#ef4444', opacity: 0.6, transition: 'all 0.2s'
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.backgroundColor = '#fee2e2' }}
+                    onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.6'; e.currentTarget.style.backgroundColor = 'transparent' }}
+                  >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="3 6 5 6 21 6"></polyline>
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                    </svg>
+                  </div>
                 </div>
 
+                {/* Valor Total */}
                 <div style={{ textAlign: 'right' }}>
                    <span style={{ fontSize: '1.2rem', fontWeight: 'bold', color: style.text }}>
                      R$ {order.total.toFixed(2)}
                    </span>
                 </div>
 
+                {/* Rodapé Status */}
                 <div style={{ 
                   borderTop: `1px solid ${colors.border}40`, paddingTop: '8px', 
                   display: 'flex', justifyContent: 'space-between', alignItems: 'center'
@@ -237,7 +321,6 @@ export default function Dashboard() {
                   }}>
                     {order.status}
                   </span>
-                  {/* Indicador visual simples */}
                   <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: order.status === 'pagamento' ? '#d97706' : '#22c55e' }} />
                 </div>
               </div>
@@ -246,8 +329,18 @@ export default function Dashboard() {
         </div>
       </main>
 
-      {/* MODAL CRIAR MESA */}
-      {isModalOpen && (
+      {/* MODAL 1: DETALHES DA COMANDA (PDV) */}
+      {selectedOrder && (
+        <OrderDetailsModal 
+          orderId={selectedOrder.id}
+          label={selectedOrder.label}
+          onClose={() => setSelectedOrder(null)}
+          onUpdate={fetchOrders} // Atualiza o dashboard ao fechar/alterar
+        />
+      )}
+
+      {/* MODAL 2: CRIAR NOVA MESA */}
+      {isCreateModalOpen && (
         <div style={{
           position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 50,
           display: 'flex', alignItems: 'center', justifyContent: 'center'
@@ -265,7 +358,7 @@ export default function Dashboard() {
                   type="text"
                   value={newLabel}
                   onChange={(e) => setNewLabel(e.target.value)}
-                  placeholder="Ex: 10, Balcão, João..."
+                  placeholder="Ex: 10, Balcão..."
                   style={{ ...globalStyles.input, fontSize: '1.2rem', textAlign: 'center', fontWeight: 'bold', marginBottom: '10px' }}
                   autoComplete="off"
                 />
@@ -275,7 +368,7 @@ export default function Dashboard() {
               <div style={{ display: 'flex', gap: '10px' }}>
                 <button 
                   type="button" 
-                  onClick={() => setIsModalOpen(false)}
+                  onClick={() => setIsCreateModalOpen(false)}
                   style={{ flex: 1, padding: '12px', borderRadius: '8px', border: `1px solid ${colors.border}`, background: 'transparent', cursor: 'pointer', color: colors.text }}
                 >
                   Cancelar
