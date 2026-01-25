@@ -15,23 +15,20 @@ type ClosedOrder = {
   created_at: string
 }
 
-export default function VendasHistoryPage() {
+export default function VendasPage() {
   const router = useRouter()
-  
-  // Define "hoje" usando a data local (YYYY-MM-DD)
   const today = new Date().toLocaleDateString('sv-SE')
   
   const [orders, setOrders] = useState<ClosedOrder[]>([])
   const [loading, setLoading] = useState(true)
   const [dateFilter, setDateFilter] = useState(today)
-  const [myOrgId, setMyOrgId] = useState<string | null>(null)
   const [selectedOrder, setSelectedOrder] = useState<{id: string, label: string} | null>(null)
 
   useEffect(() => {
-    initVendas()
+    initFetch()
   }, [dateFilter])
 
-  const initVendas = async () => {
+  const initFetch = async () => {
     setLoading(true)
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) { router.push('/login'); return }
@@ -43,50 +40,45 @@ export default function VendasHistoryPage() {
       .single()
 
     if (profile?.org_id) {
-      setMyOrgId(profile.org_id)
-      
-      /**
-       * AJUSTE DE FUSO HORÁRIO (UTC-3):
-       * Como o banco armazena em UTC, o dia 24 no Brasil (UTC-3) 
-       * começa às 03:00:00 do dia 24 em UTC e termina às 02:59:59 do dia 25 em UTC.
-       */
-      const startOfDay = `${dateFilter}T03:00:00.000Z`
-      
-      // Calcula o dia seguinte para fechar o intervalo de 24h
-      const nextDayDate = new Date(dateFilter)
-      nextDayDate.setDate(nextDayDate.getDate() + 1)
-      const nextDayStr = nextDayDate.toLocaleDateString('sv-SE')
-      const endOfDay = `${nextDayStr}T02:59:59.999Z`
-      
+      const startOfDay = `${dateFilter}T00:00:00.000Z`
+      const endOfDay = `${dateFilter}T23:59:59.999Z`
+
       const { data, error } = await supabase
         .from('orders')
         .select('*')
         .eq('org_id', profile.org_id)
         .neq('status', 'aberta')
-        .gte('created_at', startOfDay) // Início do dia compensado
-        .lte('created_at', endOfDay)   // Fim do dia compensado
+        .gte('created_at', startOfDay)
+        .lte('created_at', endOfDay)
         .order('created_at', { ascending: false })
 
-      if (error) {
-        console.error("Erro na busca:", error.message)
-      } else {
-        setOrders(data || [])
-      }
+      if (!error) setOrders(data || [])
     }
     setLoading(false)
   }
 
-  const handleDelete = async (id: string, label: string) => {
-    if (!confirm(`⚠️ Excluir venda da mesa "${label}"?`)) return
+  // FUNÇÃO PARA EXCLUIR VENDA
+  const handleDelete = async (e: React.MouseEvent, id: string, label: string) => {
+    e.stopPropagation() // Impede de abrir o modal ao clicar no botão de excluir
     
-    const { error } = await supabase.from('orders').delete().eq('id', id)
-    
-    if (!error) {
-      setOrders(prev => prev.filter(o => o.id !== id))
-    } else {
+    if (!confirm(`⚠️ Atenção: Deseja realmente excluir permanentemente a venda da mesa "${label}"? Esta ação não pode ser desfeita.`)) {
+      return
+    }
+
+    const { error } = await supabase
+      .from('orders')
+      .delete()
+      .eq('id', id)
+
+    if (error) {
       alert("Erro ao excluir: " + error.message)
+    } else {
+      // Remove da lista localmente para dar feedback instantâneo
+      setOrders(prev => prev.filter(o => o.id !== id))
     }
   }
+
+  const totalGeral = orders.reduce((acc, curr) => acc + (curr.status === 'concluida' ? curr.total : 0), 0)
 
   const navBtn = {
     background: 'white', border: `1px solid ${colors.border}`, borderRadius: '6px',
@@ -104,72 +96,88 @@ export default function VendasHistoryPage() {
           <BrandLogo size={36} color={colors.primary} />
           <div style={{ lineHeight: 1 }}>
             <span style={{ fontWeight: 800, color: colors.primary, display: 'block' }}>KOMANDA</span>
-            <span style={{ fontSize: '0.65rem', color: colors.textMuted, textTransform: 'uppercase' }}>Histórico</span>
+            <span style={{ fontSize: '0.65rem', color: colors.textMuted, textTransform: 'uppercase' }}>Histórico de Vendas</span>
           </div>
         </div>
-
-        <div style={{ display: 'flex', gap: '10px' }}>
-          <button onClick={() => router.push('/')} style={navBtn}>🏠 Início</button>
-          <button onClick={() => router.push('/reports')} style={navBtn}>📈 Relatórios</button>
-          <button 
-            onClick={async () => { await supabase.auth.signOut(); router.push('/login') }}
-            style={{ ...navBtn, backgroundColor: colors.errorBg, color: colors.errorText, border: 'none' }}
-          >
-            Sair
-          </button>
-        </div>
+        <button onClick={() => router.push('/')} style={navBtn}>🏠 Início</button>
       </header>
 
-      <main style={{ width: '100%', maxWidth: '900px', padding: '30px 20px', flex: 1 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
+      <main style={{ width: '100%', maxWidth: '800px', padding: '30px 20px' }}>
+        
+        <div style={{ 
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center', 
+          marginBottom: '25px', backgroundColor: 'white', padding: '20px', 
+          borderRadius: '12px', border: `1px solid ${colors.border}`,
+          boxShadow: '0 2px 4px rgba(0,0,0,0.02)'
+        }}>
           <div>
-            <h2 style={{ fontSize: '1.2rem', color: colors.text, margin: 0 }}>Gestão de Vendas</h2>
-            <p style={{ fontSize: '0.8rem', color: colors.textMuted }}>Exibindo registros conforme horário local de Brasília.</p>
+            <label style={{ fontSize: '0.75rem', fontWeight: 800, color: colors.textMuted, display: 'block', marginBottom: '5px' }}>DATA</label>
+            <input 
+              type="date" 
+              value={dateFilter} 
+              onChange={(e) => setDateFilter(e.target.value)}
+              style={{ padding: '8px', borderRadius: '6px', border: `1px solid ${colors.border}`, fontWeight: 'bold' }}
+            />
           </div>
-          <input 
-            type="date" 
-            value={dateFilter} 
-            onChange={(e) => setDateFilter(e.target.value)}
-            style={{ padding: '10px', borderRadius: '8px', border: `1px solid ${colors.border}`, fontWeight: 'bold', outline: 'none' }}
-          />
+          <div style={{ textAlign: 'right' }}>
+            <span style={{ fontSize: '0.75rem', fontWeight: 800, color: colors.textMuted }}>TOTAL DO DIA</span>
+            <div style={{ fontSize: '1.8rem', fontWeight: 900, color: colors.primary }}>R$ {totalGeral.toFixed(2)}</div>
+          </div>
         </div>
 
-        {loading ? (
-          <p style={{ textAlign: 'center', color: colors.textMuted }}>Sincronizando registros...</p>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            {orders.map(order => (
-              <div key={order.id} style={{ 
-                backgroundColor: 'white', padding: '15px 20px', borderRadius: '12px', 
-                border: `1px solid ${colors.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                boxShadow: '0 2px 4px rgba(0,0,0,0.02)'
-              }}>
-                <div onClick={() => setSelectedOrder({id: order.id, label: order.label})} style={{ cursor: 'pointer', flex: 1 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          {loading ? (
+            <p style={{ textAlign: 'center', color: colors.textMuted }}>Sincronizando...</p>
+          ) : (
+            orders.map(order => (
+              <div 
+                key={order.id} 
+                onClick={() => setSelectedOrder({ id: order.id, label: order.label })}
+                style={{ 
+                  backgroundColor: 'white', padding: '15px 20px', borderRadius: '12px', cursor: 'pointer',
+                  border: `1px solid ${colors.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.02)'
+                }}
+              >
+                <div style={{ flex: 1 }}>
                   <div style={{ fontWeight: 800, fontSize: '1.1rem', color: colors.text }}>
-                    Mesa {order.label} 
-                    <span style={{ marginLeft: '10px', fontSize: '0.7rem', padding: '2px 6px', borderRadius: '4px', backgroundColor: order.status === 'concluida' ? '#dcfce7' : '#fee2e2', color: order.status === 'concluida' ? '#166534' : '#991b1b' }}>
+                    Mesa {order.label}
+                    <span style={{ 
+                      marginLeft: '10px', fontSize: '0.65rem', padding: '3px 8px', borderRadius: '4px',
+                      backgroundColor: order.status === 'concluida' ? '#dcfce7' : '#fffbeb',
+                      color: order.status === 'concluida' ? '#166534' : '#b45309'
+                    }}>
                       {order.status.toUpperCase()}
                     </span>
                   </div>
-                  <div style={{ fontSize: '0.85rem', color: colors.textMuted }}>
-                    Pago via: <span style={{ textTransform: 'uppercase', fontWeight: 'bold' }}>{order.payment_method || '---'}</span> • {new Date(order.created_at).toLocaleTimeString('pt-BR')}
+                  <div style={{ fontSize: '0.8rem', color: colors.textMuted, marginTop: '4px' }}>
+                    {new Date(order.created_at).toLocaleTimeString('pt-BR')} • {order.payment_method?.toUpperCase() || 'S/ INFO'}
                   </div>
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-                  <span style={{ fontSize: '1.2rem', fontWeight: 800, color: colors.primary }}>R$ {order.total.toFixed(2)}</span>
+                  <div style={{ fontSize: '1.2rem', fontWeight: 800, color: colors.primary }}>
+                    R$ {order.total.toFixed(2)}
+                  </div>
+                  
+                  {/* BOTÃO DE EXCLUIR */}
                   <button 
-                    onClick={() => handleDelete(order.id, order.label)}
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444' }}
+                    onClick={(e) => handleDelete(e, order.id, order.label)}
+                    style={{ 
+                      background: 'none', border: 'none', cursor: 'pointer', 
+                      fontSize: '1.2rem', padding: '8px', color: '#ef4444',
+                      borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      transition: 'background 0.2s'
+                    }}
+                    title="Excluir Venda"
                   >
                     🗑️
                   </button>
                 </div>
               </div>
-            ))}
-            {orders.length === 0 && <p style={{ textAlign: 'center', color: colors.textMuted, marginTop: '40px' }}>Nenhuma venda registrada nesta data.</p>}
-          </div>
-        )}
+            ))
+          )}
+        </div>
       </main>
 
       {selectedOrder && (
@@ -177,7 +185,7 @@ export default function VendasHistoryPage() {
           orderId={selectedOrder.id}
           label={selectedOrder.label}
           onClose={() => setSelectedOrder(null)}
-          onUpdate={initVendas}
+          onUpdate={initFetch}
         />
       )}
     </div>

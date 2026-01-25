@@ -24,7 +24,7 @@ type TopCategory = { category: string; total: number }
 export default function ReportsPage() {
   const router = useRouter()
   
-  const today = new Date().toISOString().split('T')[0]
+  const today = new Date().toLocaleDateString('sv-SE')
   const [startDate, setStartDate] = useState(today)
   const [endDate, setEndDate] = useState(today)
   const [loading, setLoading] = useState(true)

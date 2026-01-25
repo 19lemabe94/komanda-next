@@ -21,11 +21,8 @@ export default function Dashboard() {
   const [userRole, setUserRole] = useState<string | null>(null)
   const [myOrgId, setMyOrgId] = useState<string | null>(null)
   
-  // Modais
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
-  
-  // Estado Nova Mesa
   const [newLabel, setNewLabel] = useState('')
   const [creating, setCreating] = useState(false)
   const [feedback, setFeedback] = useState('')
@@ -41,7 +38,6 @@ export default function Dashboard() {
       return
     }
     
-    // Busca perfil completo para garantir isolamento de Org
     const { data: profile } = await supabase
       .from('profiles')
       .select('role, org_id')
@@ -52,16 +48,12 @@ export default function Dashboard() {
       setUserRole(profile.role)
       setMyOrgId(profile.org_id)
 
-      // Redirecionamento de segurança caso a Org não exista
       if (!profile.org_id) {
         router.push('/setup')
         return
       }
-
-      // Busca ordens filtrando pela Org do usuário
       await fetchOrders(profile.org_id)
     }
-
     setLoading(false)
   }
 
@@ -72,19 +64,18 @@ export default function Dashboard() {
     const { data, error } = await supabase
       .from('orders')
       .select('*')
-      .eq('org_id', targetOrgId) // Filtro crucial de isolamento
+      .eq('org_id', targetOrgId)
       .in('status', ['aberta', 'pagamento'])
       .order('created_at', { ascending: true })
     
-    if (error) console.error('Erro ao buscar comandas:', error)
-    else setOrders(data || [])
+    if (!error) setOrders(data || [])
   }
 
   const handleDeleteOrder = async (e: React.MouseEvent, id: string, label: string, total: number) => {
     e.stopPropagation() 
     if (total > 0) {
-        const confirm = window.confirm(`Mesa "${label}" tem consumo de R$ ${total.toFixed(2)}. Excluir mesmo assim?`)
-        if (!confirm) return
+      const confirmExcluir = window.confirm(`Mesa "${label}" tem consumo de R$ ${total.toFixed(2)}. Excluir mesmo assim?`)
+      if (!confirmExcluir) return
     }
     const { error } = await supabase.from('orders').delete().eq('id', id)
     if (!error) setOrders(current => current.filter(order => order.id !== id))
@@ -104,61 +95,62 @@ export default function Dashboard() {
       return
     }
 
-    // Insere com o org_id do dono logado
     const { error } = await supabase.from('orders').insert([{ 
       label: labelFinal, 
       status: 'aberta',
-      org_id: myOrgId 
+      org_id: myOrgId // Isolamento por empresa
     }])
 
     if (!error) {
       setIsCreateModalOpen(false)
       setNewLabel('')
-      fetchOrders()
-    } else {
-      setFeedback('Erro ao abrir mesa.')
+      fetchOrders(myOrgId)
     }
-    
     setCreating(false)
   }
 
   if (loading) return null
 
-  const navButtonStyle = {
+  const navBtnStyle = {
     background: 'white', border: `1px solid ${colors.border}`, borderRadius: '6px',
-    padding: '8px 16px', color: colors.text, fontSize: '0.85rem', fontWeight: 600,
-    cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px'
+    padding: '8px 14px', color: colors.text, fontSize: '0.85rem', fontWeight: 600,
+    cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px'
   }
 
   return (
     <div style={{ ...globalStyles.container, justifyContent: 'flex-start', background: '#f8fafc' }}>
       
-      {/* NAVBAR PADRONIZADA */}
-      <header style={{
-        width: '100%', backgroundColor: 'white', borderBottom: `1px solid ${colors.border}`,
+      {/* HEADER PADRONIZADO - KOMANDA */}
+      <header style={{ 
+        width: '100%', backgroundColor: 'white', borderBottom: `1px solid ${colors.border}`, 
         padding: '0 20px', height: '70px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        boxShadow: '0 2px 4px rgba(0,0,0,0.02)'
+        boxShadow: '0 2px 4px rgba(0,0,0,0.02)', position: 'sticky', top: 0, zIndex: 50
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
           <BrandLogo size={36} color={colors.primary} />
           <div style={{ lineHeight: 1 }}>
             <span style={{ fontWeight: 800, color: colors.primary, display: 'block' }}>KOMANDA</span>
-            <span style={{ fontSize: '0.65rem', color: colors.textMuted, textTransform: 'uppercase' }}>Dashboard</span>
+            <span style={{ fontSize: '0.65rem', color: colors.textMuted, textTransform: 'uppercase', fontWeight: 700 }}>
+              OPERAÇÃO / COMANDAS
+            </span>
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <button onClick={() => router.push('/')} style={{ ...navBtnStyle, backgroundColor: '#f1f5f9' }}>🏠 Início</button>
+          <button onClick={() => router.push('/vendas')} style={{ ...navBtnStyle, borderColor: colors.primary, color: colors.primary }}>💰 Vendas</button>
+          
           {userRole === 'admin' && (
             <>
-              <button onClick={() => { router.push('/reports'); router.refresh(); }} style={navButtonStyle}>📈 Relatórios</button>
-              <button onClick={() => { router.push('/products'); router.refresh(); }} style={navButtonStyle}>🍔 Menu</button>
-              <button onClick={() => { router.push('/squad'); router.refresh(); }} style={navButtonStyle}>👥 Squad</button>
+              <button onClick={() => router.push('/reports')} style={navBtnStyle}>📈 Relatórios</button>
+              <button onClick={() => router.push('/products')} style={navBtnStyle}>🍔 Menu</button>
+              <button onClick={() => router.push('/squad')} style={navBtnStyle}>👥 Squad</button>
             </>
           )}
 
           <button 
             onClick={async () => { await supabase.auth.signOut(); router.push('/login') }}
-            style={{ backgroundColor: colors.errorBg, color: colors.errorText, border: 'none', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.85rem' }}
+            style={{ ...navBtnStyle, backgroundColor: colors.errorBg, color: colors.errorText, border: 'none', marginLeft: '5px' }}
           >
             Sair
           </button>
@@ -166,8 +158,9 @@ export default function Dashboard() {
       </header>
 
       <main style={{ width: '100%', maxWidth: '1200px', padding: '30px 20px', flex: 1 }}>
-        <div style={{ marginBottom: '25px' }}>
-            <h2 style={{ fontSize: '1.5rem', color: colors.text, margin: 0 }}>Vendas em Aberto</h2>
+        <div style={{ marginBottom: '25px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h2 style={{ fontSize: '1.4rem', color: colors.text, margin: 0 }}>Vendas em Aberto</h2>
+            <span style={{ fontSize: '0.85rem', color: colors.textMuted }}>{new Date().toLocaleDateString('pt-BR')}</span>
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '20px' }}>
@@ -185,12 +178,12 @@ export default function Dashboard() {
                   border: `2px solid ${order.status === 'pagamento' ? '#d97706' : colors.border}`,
                   borderRadius: '12px', padding: '15px', cursor: 'pointer', height: '140px',
                   display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
-                  boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', position: 'relative'
+                  boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)'
                 }}
             >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                   <span style={{ fontSize: '1.1rem', fontWeight: 800, color: colors.text, textTransform: 'capitalize' }}>{order.label}</span>
-                  <div onClick={(e) => handleDeleteOrder(e, order.id, order.label, order.total)} style={{ color: '#ef4444', opacity: 0.6 }}>
+                  <div onClick={(e) => handleDeleteOrder(e, order.id, order.label, order.total)} style={{ color: '#ef4444', opacity: 0.5, fontSize: '1.1rem' }}>
                     🗑️
                   </div>
                 </div>
@@ -201,30 +194,31 @@ export default function Dashboard() {
                    </span>
                 </div>
 
-                <div style={{ borderTop: `1px solid ${colors.border}40`, paddingTop: '8px', display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: colors.textMuted, textTransform: 'uppercase' }}>{order.status}</span>
-                  <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#22c55e' }} />
+                <div style={{ borderTop: `1px solid ${colors.border}40`, paddingTop: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '0.65rem', fontWeight: 700, color: colors.textMuted, textTransform: 'uppercase' }}>{order.status}</span>
+                  <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: order.status === 'pagamento' ? '#d97706' : '#22c55e' }} />
                 </div>
             </div>
           ))}
         </div>
       </main>
 
+      {/* MODAL DE DETALHES E CRIAÇÃO */}
       {selectedOrder && (
         <OrderDetailsModal 
           orderId={selectedOrder.id}
           label={selectedOrder.label}
           onClose={() => setSelectedOrder(null)}
-          onUpdate={fetchOrders}
+          onUpdate={() => fetchOrders(myOrgId!)} // Atualiza os cards após lançar o produto
         />
       )}
 
       {isCreateModalOpen && (
-        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 60, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div style={{ ...globalStyles.card, width: '90%', maxWidth: '350px', padding: '30px' }}>
             <h3 style={{ margin: '0 0 20px', color: colors.text, textAlign: 'center' }}>Abrir Mesa</h3>
             <form onSubmit={handleCreateOrder}>
-              <input value={newLabel} onChange={(e) => setNewLabel(e.target.value)} placeholder="Ex: 05, Balcão..." style={{ ...globalStyles.input, fontSize: '1.2rem', textAlign: 'center' }} />
+              <input autoFocus value={newLabel} onChange={(e) => setNewLabel(e.target.value)} placeholder="Ex: 05, Balcão..." style={{ ...globalStyles.input, fontSize: '1.2rem', textAlign: 'center' }} />
               {feedback && <p style={{ color: colors.errorText, fontSize: '0.85rem', textAlign: 'center', marginTop: '10px' }}>{feedback}</p>}
               <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
                 <button type="button" onClick={() => setIsCreateModalOpen(false)} style={{ flex: 1, padding: '12px', borderRadius: '8px', border: '1px solid #ccc', background: 'none' }}>Sair</button>

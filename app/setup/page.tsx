@@ -79,7 +79,7 @@ export default function SetupPage() {
             autoFocus
             value={orgName}
             onChange={(e) => setOrgName(e.target.value)}
-            placeholder="Ex: Toca do Bezerra"
+            placeholder="Ex: PIZZARIA DO XANDÃO"
             style={{ ...globalStyles.input, textAlign: 'center', fontSize: '1.1rem' }}
           />
           <button 
