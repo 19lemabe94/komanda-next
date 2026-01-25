@@ -1,131 +1,97 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { useRouter } from 'next/navigation'
 import { colors, globalStyles } from '../styles/theme'
-import { BrandLogo } from '../components/BrandLogo'
 
 export default function SetupPage() {
+  const router = useRouter()
   const [orgName, setOrgName] = useState('')
   const [loading, setLoading] = useState(false)
-  const [checking, setChecking] = useState(true)
-  const router = useRouter()
 
-  useEffect(() => {
-    checkAccess()
-  }, [])
+  const handleCreateOrg = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!orgName.trim()) return
+    setLoading(true)
 
-  const checkAccess = async () => {
+    // Recupera a sessão atual para vincular o perfil
     const { data: { session } } = await supabase.auth.getSession()
-    
     if (!session) {
       router.push('/login')
       return
     }
 
-    // Busca o perfil para verificar o estado atual
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('org_id')
-      .eq('id', session.user.id)
+    /**
+     * 1. Criar a Organização
+     * IMPORTANTE: A política de RLS no banco deve permitir INSERT para 'authenticated'.
+     */
+    const { data: orgData, error: orgError } = await supabase
+      .from('organizations')
+      .insert([{ name: orgName.trim() }])
+      .select()
       .single()
 
-    // SE JÁ TEM ORG: Redireciona para a Home (já está configurado)
-    if (profile?.org_id) {
-      router.push('/')
+    if (orgError) {
+      // Se cair aqui, a política de INSERT do RLS na tabela organizations está bloqueando.
+      alert("Erro ao criar organização: " + orgError.message)
+      setLoading(false)
       return
     }
 
-    // SE NÃO TEM ORG: Permite ficar na página para criar a primeira Organização
-    // Não vamos checar se é 'admin' aqui, pois o primeiro acesso de um 
-    // usuário criado manualmente será justamente para se tornar o Admin/Dono.
-    setChecking(false)
-  }
-
-  const handleSetup = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!orgName.trim()) return
-    
-    setLoading(true)
-
-    const { data: { session } } = await supabase.auth.getSession()
-    
-    try {
-      const res = await fetch('/api/setup-org', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          orgName: orgName.trim(), 
-          userId: session?.user.id 
-        })
+    /**
+     * 2. Tornar o usuário ADM e vincular à nova Org
+     * Atualiza o perfil do usuário logado com o ID da org recém-criada.
+     */
+    const { error: profileError } = await supabase
+      .from('profiles')
+      .update({ 
+        org_id: orgData.id, 
+        role: 'admin' // Define como administrador por padrão no setup inicial
       })
+      .eq('id', session.user.id)
 
-      const data = await res.json()
-
-      if (res.ok) {
-        // O router.refresh() é vital para limpar o cache do cargo e da org
-        router.refresh()
-        // Pequeno delay para o banco processar antes de ir para a Home
-        setTimeout(() => router.push('/'), 500)
-      } else {
-        throw new Error(data.error || 'Erro na configuração')
-      }
-    } catch (error: any) {
-      alert(error.message)
-    } finally {
+    if (profileError) {
+      // Se cair aqui, a política de UPDATE do RLS na tabela profiles está bloqueando.
+      alert("Erro ao vincular seu perfil administrativo: " + profileError.message)
       setLoading(false)
+    } else {
+      /**
+       * 3. Sucesso!
+       * O router.refresh() é crucial aqui para que o Next.js invalide o cache 
+       * e reconheça o novo org_id e role nas verificações de layout.
+       */
+      router.push('/')
+      router.refresh()
     }
-  }
-
-  if (checking) {
-    return (
-      <div style={{ ...globalStyles.container, background: '#f8fafc' }}>
-        <p style={{ color: colors.textMuted }}>Validando acesso...</p>
-      </div>
-    )
   }
 
   return (
     <div style={{ ...globalStyles.container, background: '#f8fafc' }}>
-      <div style={{
-        ...globalStyles.card, 
-        width: '100%', 
-        maxWidth: '450px', 
-        padding: '40px', 
-        textAlign: 'center'
-      }}>
-        <div style={{ marginBottom: '30px' }}>
-          <BrandLogo size={60} color={colors.primary} />
-          <h1 style={{ color: colors.primary, fontSize: '1.8rem', fontWeight: 800, margin: '15px 0 5px' }}>
-            Configuração Inicial
-          </h1>
-          <p style={{ color: colors.textMuted, fontSize: '0.95rem' }}>
-            Identificamos que este é seu primeiro acesso. <br/>
-            Como se chama o seu estabelecimento?
-          </p>
-        </div>
-
-        <form onSubmit={handleSetup} style={{ textAlign: 'left' }}>
-          <div style={{ marginBottom: '25px' }}>
-            <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.85rem', color: colors.textMuted, fontWeight: 600 }}>
-              NOME DA ORGANIZAÇÃO
-            </label>
-            <input 
-              required 
-              autoFocus
-              style={globalStyles.input} 
-              value={orgName} 
-              onChange={e => setOrgName(e.target.value)} 
-              placeholder="Ex: Pizzaria Komanda"
-            />
-          </div>
-
+      <div style={{ ...globalStyles.card, maxWidth: '400px', width: '90%', padding: '40px', textAlign: 'center' }}>
+        <h2 style={{ color: colors.primary, marginBottom: '10px' }}>Bem-vindo ao Komanda!</h2>
+        <p style={{ color: colors.textMuted, marginBottom: '30px', fontSize: '0.9rem' }}>
+          Para começar, dê um nome ao seu estabelecimento. Como criador, você terá acesso total de administrador.
+        </p>
+        
+        <form onSubmit={handleCreateOrg}>
+          <input 
+            required
+            autoFocus
+            value={orgName}
+            onChange={(e) => setOrgName(e.target.value)}
+            placeholder="Ex: Toca do Bezerra"
+            style={{ ...globalStyles.input, textAlign: 'center', fontSize: '1.1rem' }}
+          />
           <button 
             type="submit" 
-            disabled={loading} 
-            style={{ ...globalStyles.buttonPrimary, height: '55px' }}
+            disabled={loading}
+            style={{ 
+              ...globalStyles.buttonPrimary, 
+              marginTop: '10px',
+              opacity: loading ? 0.7 : 1 
+            }}
           >
-            {loading ? 'CRIANDO EMPRESA...' : 'FINALIZAR E ENTRAR'}
+            {loading ? 'CONFIGURANDO...' : 'FINALIZAR CONFIGURAÇÃO'}
           </button>
         </form>
       </div>
