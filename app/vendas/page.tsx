@@ -23,6 +23,9 @@ type DailyTotals = {
   fiado: number
 }
 
+// Tipo para o filtro de pagamento
+type PaymentFilterType = 'dinheiro' | 'digital' | 'fiado' | null
+
 export default function VendasPage() {
   const router = useRouter()
   const today = new Date().toLocaleDateString('sv-SE')
@@ -33,6 +36,10 @@ export default function VendasPage() {
   const [selectedOrder, setSelectedOrder] = useState<{id: string, label: string} | null>(null)
   const [userRole, setUserRole] = useState<string | null>(null) 
   
+  // --- NOVOS ESTADOS DE FILTRO ---
+  const [searchTerm, setSearchTerm] = useState('')
+  const [paymentFilter, setPaymentFilter] = useState<PaymentFilterType>(null)
+
   const [totals, setTotals] = useState<DailyTotals>({ geral: 0, dinheiro: 0, digital: 0, fiado: 0 })
 
   useEffect(() => {
@@ -111,11 +118,40 @@ export default function VendasPage() {
     }
   }
 
-  const kpiCardStyle = {
-    flex: 1, minWidth: '140px', padding: '15px 20px', borderRadius: '12px',
-    border: `1px solid ${colors.border}`, backgroundColor: 'white',
-    display: 'flex', flexDirection: 'column' as 'column', justifyContent: 'center',
-    boxShadow: '0 2px 4px rgba(0,0,0,0.03)'
+  // --- LÓGICA DE FILTRAGEM ---
+  const filteredOrders = orders.filter(order => {
+    // 1. Filtro de Texto (Nome da Mesa)
+    const matchesSearch = order.label.toLowerCase().includes(searchTerm.toLowerCase())
+
+    // 2. Filtro de Pagamento (Clicando nos Cards)
+    let matchesPayment = true
+    if (paymentFilter === 'dinheiro') {
+      matchesPayment = order.payment_method === 'dinheiro'
+    } else if (paymentFilter === 'fiado') {
+      matchesPayment = order.payment_method === 'fiado'
+    } else if (paymentFilter === 'digital') {
+      // Digital é tudo que não é dinheiro nem fiado
+      matchesPayment = order.payment_method !== 'dinheiro' && order.payment_method !== 'fiado'
+    }
+
+    return matchesSearch && matchesPayment
+  })
+
+  // Helper para estilo do card ativo
+  const getCardStyle = (type: PaymentFilterType | 'all', defaultColor: string) => {
+    // Se 'all' (Total do dia), active significa paymentFilter === null
+    const isActive = type === 'all' ? paymentFilter === null : paymentFilter === type
+    
+    return {
+      flex: 1, minWidth: '140px', padding: '15px 20px', borderRadius: '12px',
+      border: isActive ? `2px solid ${defaultColor}` : `1px solid ${colors.border}`, 
+      backgroundColor: isActive ? '#fff' : 'white',
+      display: 'flex', flexDirection: 'column' as 'column', justifyContent: 'center',
+      boxShadow: isActive ? `0 4px 12px ${defaultColor}40` : '0 2px 4px rgba(0,0,0,0.03)',
+      cursor: 'pointer',
+      opacity: (paymentFilter && !isActive) ? 0.6 : 1, // Esmaece os não selecionados
+      transition: 'all 0.2s'
+    }
   }
 
   return (
@@ -125,48 +161,92 @@ export default function VendasPage() {
 
       <main style={{ width: '100%', maxWidth: '900px', padding: '30px 20px', flex: 1 }}>
         
-        <div style={{ marginBottom: '25px', display: 'flex', alignItems: 'center', gap: '15px', background: 'white', padding: '15px 20px', borderRadius: '12px', border: `1px solid ${colors.border}`, boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
-          <span style={{ fontSize: '1.2rem' }}>📅</span>
-          <div style={{ flex: 1 }}>
-            <label style={{ fontSize: '0.75rem', fontWeight: 800, color: colors.textMuted, display: 'block', marginBottom: '2px', textTransform: 'uppercase' }}>Filtrar por Data</label>
-            <input 
-              type="date" 
-              value={dateFilter} 
-              onChange={(e) => setDateFilter(e.target.value)}
-              style={{ border: 'none', fontWeight: 'bold', fontSize: '1.1rem', color: colors.text, outline: 'none', background: 'transparent', fontFamily: 'inherit' }}
-            />
+        {/* BARRA DE FERRAMENTAS (DATA + BUSCA) */}
+        <div style={{ marginBottom: '25px', display: 'flex', gap: '15px', flexWrap: 'wrap' }}>
+          
+          {/* INPUT DATA */}
+          <div style={{ flex: 1, minWidth: '200px', display: 'flex', alignItems: 'center', gap: '15px', background: 'white', padding: '15px 20px', borderRadius: '12px', border: `1px solid ${colors.border}`, boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+            <span style={{ fontSize: '1.2rem' }}>📅</span>
+            <div style={{ flex: 1 }}>
+              <label style={{ fontSize: '0.75rem', fontWeight: 800, color: colors.textMuted, display: 'block', marginBottom: '2px', textTransform: 'uppercase' }}>Data</label>
+              <input 
+                type="date" 
+                value={dateFilter} 
+                onChange={(e) => setDateFilter(e.target.value)}
+                style={{ border: 'none', fontWeight: 'bold', fontSize: '1.1rem', color: colors.text, outline: 'none', background: 'transparent', fontFamily: 'inherit', width: '100%' }}
+              />
+            </div>
           </div>
+
+          {/* INPUT BUSCA */}
+          <div style={{ flex: 1.5, minWidth: '250px', display: 'flex', alignItems: 'center', gap: '15px', background: 'white', padding: '15px 20px', borderRadius: '12px', border: `1px solid ${colors.border}`, boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+            <span style={{ fontSize: '1.2rem' }}>🔍</span>
+            <div style={{ flex: 1 }}>
+              <label style={{ fontSize: '0.75rem', fontWeight: 800, color: colors.textMuted, display: 'block', marginBottom: '2px', textTransform: 'uppercase' }}>Buscar Venda</label>
+              <input 
+                type="text" 
+                value={searchTerm} 
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Nome da mesa..."
+                style={{ border: 'none', fontWeight: 'bold', fontSize: '1.1rem', color: colors.text, outline: 'none', background: 'transparent', fontFamily: 'inherit', width: '100%' }}
+              />
+            </div>
+             {searchTerm && (
+               <button onClick={() => setSearchTerm('')} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#94a3b8' }}>✕</button>
+             )}
+          </div>
+
         </div>
 
+        {/* CARDS DE RESUMO (AGORA SÃO FILTROS) */}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '15px', marginBottom: '30px' }}>
-          <div style={{ ...kpiCardStyle, backgroundColor: colors.primary, color: 'white', border: 'none' }}>
+          {/* Total Geral (Reseta filtro) */}
+          <div 
+            onClick={() => setPaymentFilter(null)}
+            style={{ ...getCardStyle('all', colors.primary), backgroundColor: paymentFilter === null ? colors.primary : 'white', color: paymentFilter === null ? 'white' : colors.text }}
+          >
             <span style={{ fontSize: '0.75rem', fontWeight: 700, opacity: 0.9 }}>TOTAL DO DIA</span>
             <div style={{ fontSize: '1.8rem', fontWeight: 900, marginTop: '5px' }}>R$ {totals.geral.toFixed(2)}</div>
           </div>
 
-          <div style={kpiCardStyle}>
+          {/* Dinheiro */}
+          <div onClick={() => setPaymentFilter(paymentFilter === 'dinheiro' ? null : 'dinheiro')} style={getCardStyle('dinheiro', '#16a34a')}>
             <span style={{ fontSize: '0.75rem', fontWeight: 700, color: colors.textMuted }}>💵 DINHEIRO</span>
             <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#16a34a', marginTop: '5px' }}>R$ {totals.dinheiro.toFixed(2)}</div>
           </div>
 
-          <div style={kpiCardStyle}>
+          {/* Digital */}
+          <div onClick={() => setPaymentFilter(paymentFilter === 'digital' ? null : 'digital')} style={getCardStyle('digital', '#2563eb')}>
             <span style={{ fontSize: '0.75rem', fontWeight: 700, color: colors.textMuted }}>💳 PIX / CARTÃO</span>
             <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#2563eb', marginTop: '5px' }}>R$ {totals.digital.toFixed(2)}</div>
           </div>
 
-           <div style={kpiCardStyle}>
+          {/* Fiado */}
+          <div onClick={() => setPaymentFilter(paymentFilter === 'fiado' ? null : 'fiado')} style={getCardStyle('fiado', '#f97316')}>
             <span style={{ fontSize: '0.75rem', fontWeight: 700, color: colors.textMuted }}>📝 FIADO</span>
             <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#f97316', marginTop: '5px' }}>R$ {totals.fiado.toFixed(2)}</div>
           </div>
         </div>
 
+        {/* MENSAGEM DE FILTRO ATIVO */}
+        {(paymentFilter || searchTerm) && (
+            <div style={{ marginBottom: '15px', fontSize: '0.9rem', color: colors.textMuted }}>
+                Exibindo: <strong>{filteredOrders.length}</strong> resultados 
+                {paymentFilter && <span> • Filtro: <span style={{ textTransform: 'uppercase', fontWeight: 'bold' }}>{paymentFilter}</span></span>}
+                {searchTerm && <span> • Busca: "<strong>{searchTerm}</strong>"</span>}
+            </div>
+        )}
+
+        {/* LISTA DE VENDAS FILTRADA */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           {loading ? (
             <div style={{ textAlign: 'center', padding: '40px', color: colors.textMuted }}>Carregando vendas...</div>
-          ) : orders.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '40px', color: colors.textMuted, background: 'white', borderRadius: '12px', border: `1px solid ${colors.border}` }}>Nenhuma venda encontrada nesta data.</div>
+          ) : filteredOrders.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '40px', color: colors.textMuted, background: 'white', borderRadius: '12px', border: `1px solid ${colors.border}` }}>
+                {searchTerm || paymentFilter ? 'Nenhuma venda encontrada com estes filtros.' : 'Nenhuma venda encontrada nesta data.'}
+            </div>
           ) : (
-            orders.map(order => (
+            filteredOrders.map(order => (
               <div 
                 key={order.id} 
                 onClick={() => setSelectedOrder({ id: order.id, label: order.label })}
@@ -178,6 +258,7 @@ export default function VendasPage() {
               >
                 <div style={{ flex: 1 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    {/* Realça o texto da busca se houver */}
                     <span style={{ fontWeight: 800, fontSize: '1.1rem', color: colors.text }}>{order.label}</span>
                     <span style={{ 
                       fontSize: '0.65rem', padding: '2px 8px', borderRadius: '4px', fontWeight: 700,
@@ -221,7 +302,7 @@ export default function VendasPage() {
         </div>
       </main>
 
-      {/* MODAL DE DETALHES (Agora com prop userRole) */}
+      {/* MODAL DE DETALHES */}
       {selectedOrder && (
         <OrderDetailsModal 
           orderId={selectedOrder.id}
