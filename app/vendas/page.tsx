@@ -15,14 +15,26 @@ type ClosedOrder = {
   created_at: string
 }
 
+// Tipo para os totais do dia
+type DailyTotals = {
+  geral: number
+  dinheiro: number
+  digital: number // Pix + Cartões
+  fiado: number
+}
+
 export default function VendasPage() {
   const router = useRouter()
+  // Data inicial: Hoje (Formato ISO para input date)
   const today = new Date().toLocaleDateString('sv-SE')
   
   const [orders, setOrders] = useState<ClosedOrder[]>([])
   const [loading, setLoading] = useState(true)
   const [dateFilter, setDateFilter] = useState(today)
   const [selectedOrder, setSelectedOrder] = useState<{id: string, label: string} | null>(null)
+  
+  // Estado para os totais calculados
+  const [totals, setTotals] = useState<DailyTotals>({ geral: 0, dinheiro: 0, digital: 0, fiado: 0 })
 
   useEffect(() => {
     initFetch()
@@ -40,6 +52,7 @@ export default function VendasPage() {
       .single()
 
     if (profile?.org_id) {
+      // Ajuste de fuso horário simples para garantir o dia inteiro UTC
       const startOfDay = `${dateFilter}T00:00:00.000Z`
       const endOfDay = `${dateFilter}T23:59:59.999Z`
 
@@ -47,127 +60,185 @@ export default function VendasPage() {
         .from('orders')
         .select('*')
         .eq('org_id', profile.org_id)
-        .neq('status', 'aberta')
+        .neq('status', 'aberta') // Trazemos concluídas e canceladas
         .gte('created_at', startOfDay)
         .lte('created_at', endOfDay)
         .order('created_at', { ascending: false })
 
-      if (!error) setOrders(data || [])
+      if (!error && data) {
+        setOrders(data)
+        calculateTotals(data)
+      } else {
+        setOrders([])
+        setTotals({ geral: 0, dinheiro: 0, digital: 0, fiado: 0 })
+      }
     }
     setLoading(false)
   }
 
-  // FUNÇÃO PARA EXCLUIR VENDA
-  const handleDelete = async (e: React.MouseEvent, id: string, label: string) => {
-    e.stopPropagation() // Impede de abrir o modal ao clicar no botão de excluir
-    
-    if (!confirm(`⚠️ Atenção: Deseja realmente excluir permanentemente a venda da mesa "${label}"? Esta ação não pode ser desfeita.`)) {
-      return
-    }
+  const calculateTotals = (data: ClosedOrder[]) => {
+    const newTotals = data.reduce((acc, curr) => {
+      // Ignora canceladas nos totais
+      if (curr.status !== 'concluida') return acc
 
-    const { error } = await supabase
-      .from('orders')
-      .delete()
-      .eq('id', id)
+      const val = curr.total
+      acc.geral += val
+
+      if (curr.payment_method === 'dinheiro') {
+        acc.dinheiro += val
+      } else if (curr.payment_method === 'fiado') {
+        acc.fiado += val
+      } else {
+        // Pix, Debito, Credito
+        acc.digital += val
+      }
+      return acc
+    }, { geral: 0, dinheiro: 0, digital: 0, fiado: 0 })
+
+    setTotals(newTotals)
+  }
+
+  const handleDelete = async (e: React.MouseEvent, id: string, label: string) => {
+    e.stopPropagation()
+    if (!confirm(`⚠️ Excluir venda da mesa "${label}"? Isso não pode ser desfeito.`)) return
+
+    const { error } = await supabase.from('orders').delete().eq('id', id)
 
     if (error) {
       alert("Erro ao excluir: " + error.message)
     } else {
-      // Remove da lista localmente para dar feedback instantâneo
-      setOrders(prev => prev.filter(o => o.id !== id))
+      const updatedList = orders.filter(o => o.id !== id)
+      setOrders(updatedList)
+      calculateTotals(updatedList)
     }
   }
 
-  const totalGeral = orders.reduce((acc, curr) => acc + (curr.status === 'concluida' ? curr.total : 0), 0)
-
-  const navBtn = {
+  // Estilos
+  const navBtnStyle = {
     background: 'white', border: `1px solid ${colors.border}`, borderRadius: '6px',
-    padding: '8px 16px', color: colors.text, fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer'
+    padding: '8px 14px', color: colors.text, fontSize: '0.85rem', fontWeight: 600,
+    cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px'
+  }
+
+  const kpiCardStyle = {
+    flex: 1, minWidth: '140px', padding: '15px 20px', borderRadius: '12px',
+    border: `1px solid ${colors.border}`, backgroundColor: 'white',
+    display: 'flex', flexDirection: 'column' as 'column', justifyContent: 'center',
+    boxShadow: '0 2px 4px rgba(0,0,0,0.03)'
   }
 
   return (
     <div style={{ ...globalStyles.container, justifyContent: 'flex-start', background: '#f8fafc' }}>
       
+      {/* HEADER PADRONIZADO */}
       <header style={{ 
         width: '100%', backgroundColor: 'white', borderBottom: `1px solid ${colors.border}`, 
-        padding: '0 20px', height: '70px', display: 'flex', alignItems: 'center', justifyContent: 'space-between'
+        padding: '0 20px', height: '70px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        boxShadow: '0 2px 4px rgba(0,0,0,0.02)', position: 'sticky', top: 0, zIndex: 50
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
           <BrandLogo size={36} color={colors.primary} />
           <div style={{ lineHeight: 1 }}>
             <span style={{ fontWeight: 800, color: colors.primary, display: 'block' }}>KOMANDA</span>
-            <span style={{ fontSize: '0.65rem', color: colors.textMuted, textTransform: 'uppercase' }}>Histórico de Vendas</span>
+            <span style={{ fontSize: '0.65rem', color: colors.textMuted, textTransform: 'uppercase', fontWeight: 700 }}>
+              HISTÓRICO DE VENDAS
+            </span>
           </div>
         </div>
-        <button onClick={() => router.push('/')} style={navBtn}>🏠 Início</button>
+        <button onClick={() => router.push('/')} style={navBtnStyle}>🏠 Voltar ao Início</button>
       </header>
 
-      <main style={{ width: '100%', maxWidth: '800px', padding: '30px 20px' }}>
+      <main style={{ width: '100%', maxWidth: '900px', padding: '30px 20px', flex: 1 }}>
         
-        <div style={{ 
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center', 
-          marginBottom: '25px', backgroundColor: 'white', padding: '20px', 
-          borderRadius: '12px', border: `1px solid ${colors.border}`,
-          boxShadow: '0 2px 4px rgba(0,0,0,0.02)'
-        }}>
-          <div>
-            <label style={{ fontSize: '0.75rem', fontWeight: 800, color: colors.textMuted, display: 'block', marginBottom: '5px' }}>DATA</label>
+        {/* BARRA DE FILTRO DE DATA */}
+        <div style={{ marginBottom: '25px', display: 'flex', alignItems: 'center', gap: '15px', background: 'white', padding: '15px 20px', borderRadius: '12px', border: `1px solid ${colors.border}`, boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+          <span style={{ fontSize: '1.2rem' }}>📅</span>
+          <div style={{ flex: 1 }}>
+            <label style={{ fontSize: '0.75rem', fontWeight: 800, color: colors.textMuted, display: 'block', marginBottom: '2px', textTransform: 'uppercase' }}>Filtrar por Data</label>
             <input 
               type="date" 
               value={dateFilter} 
               onChange={(e) => setDateFilter(e.target.value)}
-              style={{ padding: '8px', borderRadius: '6px', border: `1px solid ${colors.border}`, fontWeight: 'bold' }}
+              style={{ border: 'none', fontWeight: 'bold', fontSize: '1.1rem', color: colors.text, outline: 'none', background: 'transparent', fontFamily: 'inherit' }}
             />
-          </div>
-          <div style={{ textAlign: 'right' }}>
-            <span style={{ fontSize: '0.75rem', fontWeight: 800, color: colors.textMuted }}>TOTAL DO DIA</span>
-            <div style={{ fontSize: '1.8rem', fontWeight: 900, color: colors.primary }}>R$ {totalGeral.toFixed(2)}</div>
           </div>
         </div>
 
+        {/* CARDS DE RESUMO DO DIA (Modais de totais) */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '15px', marginBottom: '30px' }}>
+          {/* Total Geral */}
+          <div style={{ ...kpiCardStyle, backgroundColor: colors.primary, color: 'white', border: 'none' }}>
+            <span style={{ fontSize: '0.75rem', fontWeight: 700, opacity: 0.9 }}>TOTAL DO DIA</span>
+            <div style={{ fontSize: '1.8rem', fontWeight: 900, marginTop: '5px' }}>R$ {totals.geral.toFixed(2)}</div>
+          </div>
+
+          {/* Dinheiro */}
+          <div style={kpiCardStyle}>
+            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: colors.textMuted }}>💵 DINHEIRO</span>
+            <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#16a34a', marginTop: '5px' }}>R$ {totals.dinheiro.toFixed(2)}</div>
+          </div>
+
+          {/* Digital (Pix/Cartão) */}
+          <div style={kpiCardStyle}>
+            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: colors.textMuted }}>💳 PIX / CARTÃO</span>
+            <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#2563eb', marginTop: '5px' }}>R$ {totals.digital.toFixed(2)}</div>
+          </div>
+
+           {/* Fiado */}
+           <div style={kpiCardStyle}>
+            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: colors.textMuted }}>📝 FIADO</span>
+            <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#f97316', marginTop: '5px' }}>R$ {totals.fiado.toFixed(2)}</div>
+          </div>
+        </div>
+
+        {/* LISTA DE VENDAS */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           {loading ? (
-            <p style={{ textAlign: 'center', color: colors.textMuted }}>Sincronizando...</p>
+            <div style={{ textAlign: 'center', padding: '40px', color: colors.textMuted }}>Carregando vendas...</div>
+          ) : orders.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '40px', color: colors.textMuted, background: 'white', borderRadius: '12px', border: `1px solid ${colors.border}` }}>Nenhuma venda encontrada nesta data.</div>
           ) : (
             orders.map(order => (
               <div 
                 key={order.id} 
                 onClick={() => setSelectedOrder({ id: order.id, label: order.label })}
                 style={{ 
-                  backgroundColor: 'white', padding: '15px 20px', borderRadius: '12px', cursor: 'pointer',
+                  backgroundColor: 'white', padding: '18px 20px', borderRadius: '12px', cursor: 'pointer',
                   border: `1px solid ${colors.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                  boxShadow: '0 2px 4px rgba(0,0,0,0.02)'
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.02)', transition: 'transform 0.1s'
                 }}
               >
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 800, fontSize: '1.1rem', color: colors.text }}>
-                    Mesa {order.label}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <span style={{ fontWeight: 800, fontSize: '1.1rem', color: colors.text }}>{order.label}</span>
                     <span style={{ 
-                      marginLeft: '10px', fontSize: '0.65rem', padding: '3px 8px', borderRadius: '4px',
-                      backgroundColor: order.status === 'concluida' ? '#dcfce7' : '#fffbeb',
-                      color: order.status === 'concluida' ? '#166534' : '#b45309'
+                      fontSize: '0.65rem', padding: '2px 8px', borderRadius: '4px', fontWeight: 700,
+                      backgroundColor: order.status === 'concluida' ? '#dcfce7' : '#fee2e2',
+                      color: order.status === 'concluida' ? '#166534' : '#991b1b',
+                      textTransform: 'uppercase'
                     }}>
-                      {order.status.toUpperCase()}
+                      {order.status}
                     </span>
                   </div>
-                  <div style={{ fontSize: '0.8rem', color: colors.textMuted, marginTop: '4px' }}>
-                    {new Date(order.created_at).toLocaleTimeString('pt-BR')} • {order.payment_method?.toUpperCase() || 'S/ INFO'}
+                  <div style={{ fontSize: '0.8rem', color: colors.textMuted, marginTop: '6px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span>🕒 {new Date(order.created_at).toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}</span>
+                    <span>•</span>
+                    <span style={{ textTransform: 'uppercase', fontWeight: 600 }}>{order.payment_method || 'S/ INFO'}</span>
                   </div>
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-                  <div style={{ fontSize: '1.2rem', fontWeight: 800, color: colors.primary }}>
+                  <div style={{ fontSize: '1.3rem', fontWeight: 800, color: colors.primary }}>
                     R$ {order.total.toFixed(2)}
                   </div>
                   
-                  {/* BOTÃO DE EXCLUIR */}
                   <button 
                     onClick={(e) => handleDelete(e, order.id, order.label)}
                     style={{ 
-                      background: 'none', border: 'none', cursor: 'pointer', 
-                      fontSize: '1.2rem', padding: '8px', color: '#ef4444',
-                      borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      transition: 'background 0.2s'
+                      background: '#fee2e2', border: 'none', cursor: 'pointer', 
+                      width: '36px', height: '36px', color: '#ef4444',
+                      borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: '1rem'
                     }}
                     title="Excluir Venda"
                   >
@@ -180,12 +251,13 @@ export default function VendasPage() {
         </div>
       </main>
 
+      {/* MODAL DE DETALHES (Reutilizando o mesmo componente poderoso) */}
       {selectedOrder && (
         <OrderDetailsModal 
           orderId={selectedOrder.id}
           label={selectedOrder.label}
           onClose={() => setSelectedOrder(null)}
-          onUpdate={initFetch}
+          onUpdate={initFetch} // Recarrega a lista se algo mudar
         />
       )}
     </div>

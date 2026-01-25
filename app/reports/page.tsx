@@ -24,10 +24,13 @@ type TopCategory = { category: string; total: number }
 export default function ReportsPage() {
   const router = useRouter()
   
-  const today = new Date().toLocaleDateString('sv-SE')
-  const [startDate, setStartDate] = useState(today)
-  const [endDate, setEndDate] = useState(today)
+  // Data de hoje no formato YYYY-MM-DD
+  const getToday = () => new Date().toLocaleDateString('sv-SE')
+  
+  const [startDate, setStartDate] = useState(getToday())
+  const [endDate, setEndDate] = useState(getToday())
   const [loading, setLoading] = useState(true)
+  const [activeFilter, setActiveFilter] = useState('hoje') // Para marcar o botão ativo
   const [myOrgId, setMyOrgId] = useState<string | null>(null)
 
   const [stats, setStats] = useState<FinancialStats>({ total: 0, dinheiro: 0, fiado: 0, digital: 0, ticket_medio: 0 })
@@ -40,11 +43,45 @@ export default function ReportsPage() {
     checkAdminAndFetch()
   }, [startDate, endDate])
 
+  // Lógica dos Filtros Rápidos
+  const handlePreset = (period: string) => {
+    const end = new Date()
+    const start = new Date()
+    setActiveFilter(period)
+
+    switch (period) {
+      case 'hoje':
+        // Start e End são hoje
+        break;
+      case 'ontem':
+        start.setDate(start.getDate() - 1)
+        end.setDate(end.getDate() - 1)
+        break;
+      case '7dias':
+        start.setDate(start.getDate() - 7)
+        break;
+      case 'mes':
+        start.setMonth(start.getMonth() - 1)
+        break;
+      case '6meses':
+        start.setMonth(start.getMonth() - 6)
+        break;
+      case 'ano':
+        start.setFullYear(start.getFullYear() - 1)
+        break;
+      default:
+        break;
+    }
+
+    setStartDate(start.toLocaleDateString('sv-SE'))
+    setEndDate(end.toLocaleDateString('sv-SE'))
+  }
+
   const checkAdminAndFetch = async () => {
+    setLoading(true)
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) { router.push('/login'); return }
 
-    // 1. Identifica o Perfil e a Organização
     const { data: profile } = await supabase
       .from('profiles')
       .select('role, org_id')
@@ -52,7 +89,7 @@ export default function ReportsPage() {
       .single()
     
     if (profile?.role !== 'admin') {
-      alert('Acesso negado!')
+      alert('Acesso restrito à gerência.')
       router.push('/')
       return
     }
@@ -64,7 +101,7 @@ export default function ReportsPage() {
 
     setMyOrgId(profile.org_id)
 
-    // 2. Busca cores das categorias APENAS desta organização
+    // Cores das categorias
     const { data: catSettings } = await supabase
       .from('categories')
       .select('name, color')
@@ -75,33 +112,20 @@ export default function ReportsPage() {
       setCategoryColors(colorMap)
     }
 
-    // 3. Chamadas RPC com o parâmetro p_org_id para isolamento total
-    // Certifique-se de que suas funções no Postgres agora aceitam o org_id
+    // Busca de Dados (RPCs)
     const [financeRes, prodsRes, catsRes] = await Promise.all([
-      supabase.rpc('get_period_stats', { 
-        start_date: startDate, 
-        end_date: endDate, 
-        p_org_id: profile.org_id 
-      }),
-      supabase.rpc('get_top_products', { 
-        start_date: startDate, 
-        end_date: endDate, 
-        p_org_id: profile.org_id 
-      }),
-      supabase.rpc('get_top_categories', { 
-        start_date: startDate, 
-        end_date: endDate, 
-        p_org_id: profile.org_id 
-      })
+      supabase.rpc('get_period_stats', { start_date: startDate, end_date: endDate, p_org_id: profile.org_id }),
+      supabase.rpc('get_top_products', { start_date: startDate, end_date: endDate, p_org_id: profile.org_id }),
+      supabase.rpc('get_top_categories', { start_date: startDate, end_date: endDate, p_org_id: profile.org_id })
     ])
 
     if (financeRes.data) {
       const f = financeRes.data as FinancialStats
       setStats(f)
       setPaymentDistribution([
-        { name: 'Dinheiro', value: f.dinheiro, color: '#22c55e' },
-        { name: 'Digital', value: f.digital, color: '#3b82f6' },
-        { name: 'Fiado', value: f.fiado, color: '#f97316' }
+        { name: 'Dinheiro', value: f.dinheiro, color: '#22c55e' }, // Verde
+        { name: 'Digital', value: f.digital, color: '#3b82f6' },  // Azul
+        { name: 'Fiado', value: f.fiado, color: '#f97316' }       // Laranja
       ].filter(d => d.value > 0))
     }
 
@@ -111,20 +135,21 @@ export default function ReportsPage() {
     setLoading(false)
   }
 
+  // Componente de Tooltip Personalizado para os Gráficos
   const CustomTooltip = ({ active, payload, totalValue, isCurrency = true }: any) => {
     if (active && payload && payload.length) {
       const data = payload[0]
       const percent = totalValue > 0 ? ((data.value / totalValue) * 100).toFixed(1) : 0
       return (
-        <div style={{ backgroundColor: 'white', padding: '12px', border: '1px solid #e2e8f0', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)' }}>
-          <p style={{ margin: '0 0 5px', fontWeight: 700, color: data.payload.fill || data.payload.color || colors.primary, fontSize: '0.95rem' }}>
+        <div style={{ backgroundColor: 'white', padding: '15px', border: 'none', borderRadius: '12px', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)' }}>
+          <p style={{ margin: '0 0 5px', fontWeight: 700, color: data.payload.fill || colors.primary, fontSize: '0.9rem', textTransform: 'uppercase' }}>
             {data.name || data.payload.category || data.payload.name}
           </p>
           <div style={{ display: 'flex', alignItems: 'center', gap: '15px', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: '0.9rem', color: '#64748b' }}>
+            <span style={{ fontSize: '1rem', color: '#1e293b', fontWeight: 600 }}>
               {isCurrency ? `R$ ${Number(data.value).toFixed(2)}` : `${data.value} un.`}
             </span>
-            <span style={{ fontSize: '1rem', fontWeight: 800, color: '#1e293b', backgroundColor: '#f1f5f9', padding: '2px 6px', borderRadius: '4px' }}>
+            <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#64748b', backgroundColor: '#f1f5f9', padding: '4px 8px', borderRadius: '6px' }}>
               {percent}%
             </span>
           </div>
@@ -134,43 +159,60 @@ export default function ReportsPage() {
     return null
   }
 
-  if (loading) return (
-    <div style={{...globalStyles.container, justifyContent: 'center'}}>
-      <p style={{color: colors.textMuted}}>Processando Inteligência de Dados...</p>
-    </div>
-  )
+  // Estilos Padronizados
+  const navBtnStyle = {
+    background: 'white', border: `1px solid ${colors.border}`, borderRadius: '6px',
+    padding: '8px 14px', color: colors.text, fontSize: '0.85rem', fontWeight: 600,
+    cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', transition: 'all 0.2s'
+  }
+
+  const filterBtnStyle = (isActive: boolean) => ({
+    padding: '8px 16px', borderRadius: '8px', 
+    border: isActive ? `1px solid ${colors.primary}` : '1px solid #e2e8f0', 
+    background: isActive ? '#eff6ff' : 'white', 
+    color: isActive ? colors.primary : '#64748b',
+    cursor: 'pointer', fontSize: '0.85rem', fontWeight: 700,
+    transition: 'all 0.2s', boxShadow: isActive ? '0 1px 2px 0 rgba(0, 0, 0, 0.05)' : 'none'
+  })
+
+  const kpiCardStyle = { 
+    background: 'white', padding: '25px', borderRadius: '16px', 
+    border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)',
+    display: 'flex', flexDirection: 'column' as 'column', justifyContent: 'space-between'
+  }
+
+  if (loading) return null
 
   const totalCategoryVal = topCategories.reduce((acc, curr) => acc + curr.total, 0)
   const totalProductsQty = topProducts.reduce((acc, curr) => acc + curr.quantity, 0)
 
-  const navBtn = {
-    background: 'white', border: `1px solid ${colors.border}`, borderRadius: '6px',
-    padding: '8px 16px', color: colors.text, fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer'
-  }
-
   return (
     <div style={{ ...globalStyles.container, justifyContent: 'flex-start', background: '#f8fafc' }}>
       
+      {/* HEADER PADRONIZADO */}
       <header style={{ 
         width: '100%', backgroundColor: 'white', borderBottom: `1px solid ${colors.border}`, 
         padding: '0 20px', height: '70px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        boxShadow: '0 2px 4px rgba(0,0,0,0.02)'
+        boxShadow: '0 2px 4px rgba(0,0,0,0.02)', position: 'sticky', top: 0, zIndex: 50
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
           <BrandLogo size={36} color={colors.primary} />
           <div style={{ lineHeight: 1 }}>
             <span style={{ fontWeight: 800, color: colors.primary, display: 'block' }}>KOMANDA</span>
-            <span style={{ fontSize: '0.65rem', color: colors.textMuted, textTransform: 'uppercase' }}>Intelligence</span>
+            <span style={{ fontSize: '0.65rem', color: colors.textMuted, textTransform: 'uppercase', fontWeight: 700 }}>
+              DASHBOARD / INTELIGÊNCIA
+            </span>
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: '10px' }}>
-          <button onClick={() => { router.push('/'); router.refresh(); }} style={navBtn}>🏠 Comandas</button>
-          <button onClick={() => { router.push('/products'); router.refresh(); }} style={navBtn}>🍔 Menu</button>
-          <button onClick={() => { router.push('/squad'); router.refresh(); }} style={navBtn}>👥 Squad</button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <button onClick={() => router.push('/')} style={navBtnStyle}>🏠 Início</button>
+          <button onClick={() => router.push('/vendas')} style={navBtnStyle}>💰 Vendas</button>
+          <button onClick={() => router.push('/products')} style={navBtnStyle}>🍔 Menu</button>
+          <button onClick={() => router.push('/squad')} style={navBtnStyle}>👥 Squad</button>
           <button 
             onClick={async () => { await supabase.auth.signOut(); router.push('/login') }}
-            style={{ ...navBtn, backgroundColor: colors.errorBg, color: colors.errorText, border: 'none' }}
+            style={{ ...navBtnStyle, backgroundColor: colors.errorBg, color: colors.errorText, border: 'none', marginLeft: '5px' }}
           >
             Sair
           </button>
@@ -179,100 +221,133 @@ export default function ReportsPage() {
 
       <main style={{ width: '100%', maxWidth: '1200px', padding: '30px 20px', flex: 1 }}>
         
-        {/* FILTROS */}
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '30px', background: 'white', padding: '20px', borderRadius: '12px', border: `1px solid ${colors.border}` }}>
+        {/* BARRA DE FILTROS */}
+        <div style={{ 
+          marginBottom: '30px', background: 'white', padding: '20px', borderRadius: '16px', 
+          border: `1px solid ${colors.border}`, boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)',
+          display: 'flex', flexWrap: 'wrap', gap: '20px', justifyContent: 'space-between', alignItems: 'center'
+        }}>
           <div>
-            <h2 style={{ fontSize: '1.2rem', margin: '0 0 10px', color: colors.text }}>Filtro de Faturamento</h2>
-            <div style={{ display: 'flex', gap: '10px' }}>
-              <button onClick={() => {setStartDate(today); setEndDate(today)}} style={filterBtnStyle}>Hoje</button>
-              <button onClick={() => {const d = new Date(); d.setDate(d.getDate()-7); setStartDate(d.toISOString().split('T')[0]); setEndDate(today)}} style={filterBtnStyle}>7 Dias</button>
-              <button onClick={() => {const date = new Date(); setStartDate(new Date(date.getFullYear(), date.getMonth(), 1).toISOString().split('T')[0]); setEndDate(today)}} style={filterBtnStyle}>Mês</button>
+            <h2 style={{ fontSize: '0.9rem', margin: '0 0 10px', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Período de Análise</h2>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              <button onClick={() => handlePreset('hoje')} style={filterBtnStyle(activeFilter === 'hoje')}>Hoje</button>
+              <button onClick={() => handlePreset('ontem')} style={filterBtnStyle(activeFilter === 'ontem')}>Ontem</button>
+              <button onClick={() => handlePreset('7dias')} style={filterBtnStyle(activeFilter === '7dias')}>7 Dias</button>
+              <button onClick={() => handlePreset('mes')} style={filterBtnStyle(activeFilter === 'mes')}>Mês Atual</button>
+              <button onClick={() => handlePreset('6meses')} style={filterBtnStyle(activeFilter === '6meses')}>6 Meses</button>
+              <button onClick={() => handlePreset('ano')} style={filterBtnStyle(activeFilter === 'ano')}>1 Ano</button>
             </div>
           </div>
-          <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
-            <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} style={dateInputStyle} />
-            <span style={{fontWeight: 'bold', color: colors.textMuted}}>até</span>
-            <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} style={dateInputStyle} />
+
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'center', backgroundColor: '#f8fafc', padding: '10px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+            <span style={{ fontSize: '1.2rem' }}>📅</span>
+            <input 
+              type="date" 
+              value={startDate} 
+              onChange={e => { setStartDate(e.target.value); setActiveFilter('custom'); }} 
+              style={{ background: 'transparent', border: 'none', fontWeight: 'bold', color: colors.text, outline: 'none', fontFamily: 'inherit' }} 
+            />
+            <span style={{ color: colors.textMuted, fontSize: '0.8rem' }}>até</span>
+            <input 
+              type="date" 
+              value={endDate} 
+              onChange={e => { setEndDate(e.target.value); setActiveFilter('custom'); }} 
+              style={{ background: 'transparent', border: 'none', fontWeight: 'bold', color: colors.text, outline: 'none', fontFamily: 'inherit' }} 
+            />
           </div>
         </div>
 
-        {/* KPI CARDS */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', marginBottom: '40px' }}>
-          <div style={{ backgroundColor: colors.primary, padding: '20px', borderRadius: '12px', color: 'white' }}>
-            <span style={{ opacity: 0.9, fontSize: '0.8rem', fontWeight: 600 }}>TOTAL PERÍODO</span>
-            <div style={{ fontSize: '2rem', fontWeight: 800, marginTop: '5px' }}>R$ {stats.total.toFixed(2)}</div>
+        {/* CARDS DE KPI */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px', marginBottom: '30px' }}>
+          {/* Card Principal - Total */}
+          <div style={{ ...kpiCardStyle, backgroundColor: colors.primary, color: 'white', border: 'none' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
+              <span style={{ opacity: 0.8, fontSize: '0.75rem', fontWeight: 700, letterSpacing: '1px' }}>FATURAMENTO TOTAL</span>
+              <span style={{ fontSize: '1.5rem' }}>💰</span>
+            </div>
+            <div style={{ fontSize: '2.2rem', fontWeight: 800, marginTop: '10px' }}>R$ {stats.total.toFixed(2)}</div>
+            <div style={{ fontSize: '0.8rem', opacity: 0.8, marginTop: '5px' }}>
+               {activeFilter === 'hoje' ? 'Vendas de hoje' : 'No período selecionado'}
+            </div>
           </div>
+
           <div style={kpiCardStyle}>
-            <span style={{ color: colors.textMuted, fontSize: '0.8rem', fontWeight: 600 }}>TICKET MÉDIO</span>
+            <span style={{ color: colors.textMuted, fontSize: '0.75rem', fontWeight: 700, letterSpacing: '1px' }}>TICKET MÉDIO</span>
             <div style={{ fontSize: '1.8rem', fontWeight: 800, color: colors.text }}>R$ {stats.ticket_medio.toFixed(2)}</div>
+            <div style={{ height: '4px', width: '100%', background: '#f1f5f9', borderRadius: '2px', marginTop: '10px' }}>
+               <div style={{ height: '100%', width: '60%', background: colors.primary, borderRadius: '2px' }}></div>
+            </div>
           </div>
+
           <div style={kpiCardStyle}>
-            <span style={{ color: colors.textMuted, fontSize: '0.8rem', fontWeight: 600 }}>CAIXA (DINHEIRO)</span>
+            <span style={{ color: colors.textMuted, fontSize: '0.75rem', fontWeight: 700, letterSpacing: '1px' }}>DINHEIRO (CAIXA)</span>
             <div style={{ fontSize: '1.8rem', fontWeight: 800, color: '#16a34a' }}>R$ {stats.dinheiro.toFixed(2)}</div>
+            <span style={{ fontSize: '0.8rem', color: '#16a34a', fontWeight: 600 }}>Liquidez Imediata</span>
           </div>
+
           <div style={kpiCardStyle}>
-            <span style={{ color: colors.textMuted, fontSize: '0.8rem', fontWeight: 600 }}>FIADO</span>
+            <span style={{ color: colors.textMuted, fontSize: '0.75rem', fontWeight: 700, letterSpacing: '1px' }}>A RECEBER (FIADO)</span>
             <div style={{ fontSize: '1.8rem', fontWeight: 800, color: '#f97316' }}>R$ {stats.fiado.toFixed(2)}</div>
+            <span style={{ fontSize: '0.8rem', color: '#f97316', fontWeight: 600 }}>Pendente de Pagamento</span>
           </div>
         </div>
 
-        {/* GRÁFICOS */}
+        {/* ÁREA DE GRÁFICOS */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '20px' }}>
-          <div style={chartCardStyle}>
-            <h3 style={chartTitleStyle}>🏆 Top 5 Produtos</h3>
+          
+          {/* Top Produtos */}
+          <div style={{ backgroundColor: 'white', padding: '25px', borderRadius: '16px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)' }}>
+            <h3 style={{ margin: '0 0 20px', fontSize: '1rem', color: colors.text, fontWeight: 800, textTransform: 'uppercase' }}>🏆 Top 5 Produtos Mais Vendidos</h3>
             <div style={{ height: '300px' }}>
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart layout="vertical" data={topProducts} margin={{ left: 10, right: 30 }}>
+                <BarChart layout="vertical" data={topProducts} margin={{ left: 0, right: 30, top: 0, bottom: 0 }}>
                   <XAxis type="number" hide />
-                  <YAxis dataKey="name" type="category" width={100} style={{ fontSize: '0.75rem', fontWeight: 600 }} />
-                  <Tooltip content={<CustomTooltip totalValue={totalProductsQty} isCurrency={false} />} />
-                  <Bar dataKey="quantity" fill={colors.primary} radius={[0, 4, 4, 0]} barSize={25} />
+                  <YAxis dataKey="name" type="category" width={110} tick={{ fontSize: 11, fontWeight: 600, fill: '#64748b' }} />
+                  <Tooltip content={<CustomTooltip totalValue={totalProductsQty} isCurrency={false} />} cursor={{fill: '#f8fafc'}} />
+                  <Bar dataKey="quantity" fill={colors.primary} radius={[0, 6, 6, 0]} barSize={24} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
           </div>
 
-          <div style={chartCardStyle}>
-            <h3 style={chartTitleStyle}>🍕 Vendas por Categoria</h3>
+          {/* Vendas por Categoria */}
+          <div style={{ backgroundColor: 'white', padding: '25px', borderRadius: '16px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)' }}>
+            <h3 style={{ margin: '0 0 20px', fontSize: '1rem', color: colors.text, fontWeight: 800, textTransform: 'uppercase' }}>🍕 Mix de Categorias</h3>
             <div style={{ height: '300px' }}>
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
-                  <Pie data={topCategories} innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="total" nameKey="category">
+                  <Pie data={topCategories} innerRadius={65} outerRadius={85} paddingAngle={4} dataKey="total" nameKey="category">
                     {topCategories.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={categoryColors[entry.category] || '#94a3b8'} stroke="none" />
                     ))}
                   </Pie>
                   <Tooltip content={<CustomTooltip totalValue={totalCategoryVal} isCurrency={true} />} />
-                  <Legend />
+                  <Legend verticalAlign="bottom" height={36} iconType="circle" />
                 </PieChart>
               </ResponsiveContainer>
             </div>
           </div>
 
-          <div style={chartCardStyle}>
-            <h3 style={chartTitleStyle}>💳 Pagamentos</h3>
+          {/* Meios de Pagamento */}
+          <div style={{ backgroundColor: 'white', padding: '25px', borderRadius: '16px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)' }}>
+            <h3 style={{ margin: '0 0 20px', fontSize: '1rem', color: colors.text, fontWeight: 800, textTransform: 'uppercase' }}>💳 Distribuição de Pagamentos</h3>
             <div style={{ height: '300px' }}>
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
-                  <Pie data={paymentDistribution} cx="50%" cy="50%" outerRadius={80} dataKey="value">
+                  <Pie data={paymentDistribution} cx="50%" cy="50%" innerRadius={0} outerRadius={85} dataKey="value" stroke="white" strokeWidth={2}>
                     {paymentDistribution.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} stroke="none" />
+                      <Cell key={`cell-${index}`} fill={entry.color} />
                     ))}
                   </Pie>
                   <Tooltip content={<CustomTooltip totalValue={stats.total} isCurrency={true} />} />
-                  <Legend />
+                  <Legend verticalAlign="bottom" height={36} iconType="circle" />
                 </PieChart>
               </ResponsiveContainer>
             </div>
           </div>
+
         </div>
       </main>
     </div>
   )
 }
-
-const filterBtnStyle = { padding: '6px 14px', borderRadius: '20px', border: '1px solid #e2e8f0', background: 'white', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600, color: '#475569' }
-const dateInputStyle = { background: '#f1f5f9', border: '1px solid #cbd5e1', padding: '8px', borderRadius: '6px', fontWeight: 'bold', color: '#334155', outline: 'none' }
-const kpiCardStyle = { background: 'white', padding: '20px', borderRadius: '12px', border: `1px solid ${colors.border}` }
-const chartCardStyle = { backgroundColor: 'white', padding: '25px', borderRadius: '16px', border: '1px solid #e2e8f0' }
-const chartTitleStyle = { margin: '0 0 20px', fontSize: '1.1rem', color: '#1e293b', fontWeight: 700 }
