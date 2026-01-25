@@ -167,18 +167,19 @@ export function OrderDetailsModal({ orderId, label, onClose, onUpdate, userRole 
           </div>
         ) : (
           <>
-            {/* --- LISTA DE ITENS JÁ PEDIDOS (Topo - Menor) --- */}
-            <div style={{ flex: '0 0 25%', overflowY: 'auto', padding: '10px', backgroundColor: '#f8fafc', borderBottom: `1px solid ${colors.border}` }}>
+            {/* --- LISTA DE ITENS JÁ PEDIDOS (Topo - Otimizado) --- */}
+            {/* AGORA ELA SÓ CRESCE SE TIVER ITENS (maxHeight 30%) */}
+            <div style={{ flex: '0 0 auto', maxHeight: '30%', overflowY: 'auto', backgroundColor: '#f8fafc', borderBottom: `1px solid ${colors.border}` }}>
               {items.length === 0 ? (
-                 <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontSize: '0.9rem' }}>Nenhum item lançado</div>
+                 <div style={{ padding: '10px', textAlign: 'center', color: '#94a3b8', fontSize: '0.8rem' }}>Nenhum item lançado ainda.</div>
               ) : (
                  items.map(item => (
-                  <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 10px', background: 'white', borderRadius: '8px', marginBottom: '6px', boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}>
-                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                      <span style={{ background: '#e0f2fe', color: '#0369a1', padding: '2px 8px', borderRadius: '6px', fontWeight: 800, fontSize: '0.8rem' }}>{item.quantity}</span>
+                  <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 15px', background: 'white', borderBottom: '1px solid #eee' }}>
+                    <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                      <span style={{ background: '#e0f2fe', color: '#0369a1', padding: '2px 8px', borderRadius: '6px', fontWeight: 800, fontSize: '0.8rem' }}>{item.quantity}x</span>
                       <div style={{ fontWeight: 600, color: '#334155', fontSize: '0.9rem' }}>{item.product_name_snapshot}</div>
                     </div>
-                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
                       <span style={{ fontWeight: 800, color: '#334155', fontSize: '0.9rem' }}>R$ {(item.product_price_snapshot * item.quantity).toFixed(2)}</span>
                       {userRole === 'admin' && (
                         <button onClick={() => handleRemoveItem(item.id)} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: '0.9rem' }}>🗑️</button>
@@ -213,7 +214,7 @@ export function OrderDetailsModal({ orderId, label, onClose, onUpdate, userRole 
                   </div>
                 </div>
 
-                {/* 2. Lista de Produtos (LIST VIEW - MELHOR PARA MOBILE) */}
+                {/* 2. Lista de Produtos (LIST VIEW - OTIMIZADO) */}
                 <div style={{ flex: 1, overflowY: 'auto', padding: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   {filteredProducts.map(p => {
                     const isSelected = selectedProductId === p.id

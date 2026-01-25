@@ -234,19 +234,25 @@ export default function ProductsPage() {
            {/* Categorias Dinâmicas */}
            {categories.map(cat => (
              <button 
-               key={cat.id}
-               onClick={() => setSelectedCategory(cat.name)}
-               style={{ 
-                 padding: '8px 16px', borderRadius: '20px', cursor: 'pointer', whiteSpace: 'nowrap', fontWeight: 700, fontSize: '0.85rem',
-                 backgroundColor: selectedCategory === cat.name ? cat.color : 'white',
-                 color: selectedCategory === cat.name ? 'white' : colors.text,
-                 border: selectedCategory === cat.name ? 'none' : `1px solid ${colors.border}`,
-                 boxShadow: selectedCategory === cat.name ? `0 4px 10px ${cat.color}60` : 'none',
-                 transition: 'all 0.2s'
-               }}
-             >
-               {cat.name}
-             </button>
+                key={cat.id}
+                onClick={() => setSelectedCategory(cat.name)}
+                style={{ 
+                  padding: '8px 16px', 
+                  borderRadius: '20px', 
+                  cursor: 'pointer', 
+                  whiteSpace: 'nowrap', 
+                  fontWeight: 700, 
+                  fontSize: '0.85rem',
+                  backgroundColor: selectedCategory === cat.name ? cat.color : 'white',
+                  color: selectedCategory === cat.name ? 'white' : colors.text,
+                  // AQUI ESTAVA O ERRO: Deixe apenas ESTA definição de border
+                  border: selectedCategory === cat.name ? 'none' : `1px solid ${colors.border}`,
+                  boxShadow: selectedCategory === cat.name ? `0 4px 10px ${cat.color}60` : 'none',
+                  transition: 'all 0.2s'
+                }}
+              >
+                {cat.name}
+              </button>
            ))}
         </div>
 
