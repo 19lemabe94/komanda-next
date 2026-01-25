@@ -23,8 +23,11 @@ export default function SquadPage() {
   
   // Estados do Modal
   const [isModalOpen, setIsModalOpen] = useState(false)
-  const [newUser, setNewUser] = useState({ username: '', password: '', role: 'funcionario' })
-  const [creating, setCreating] = useState(false)
+  const [editingMember, setEditingMember] = useState<Member | null>(null) // Para saber se é Edição
+  
+  // Formulário Unificado
+  const [formData, setFormData] = useState({ username: '', password: '', role: 'funcionario' })
+  const [processing, setProcessing] = useState(false)
 
   useEffect(() => {
     fetchSquad()
@@ -37,7 +40,7 @@ export default function SquadPage() {
     
     setCurrentUserEmail(session.user.email || '')
 
-    // 1. Primeiro buscamos o perfil do usuário logado
+    // 1. Busca perfil do usuário logado
     const { data: myProfile } = await supabase
       .from('profiles')
       .select('org_id, role')
@@ -48,54 +51,73 @@ export default function SquadPage() {
       setCurrentOrgId(myProfile.org_id)
       setUserRole(myProfile.role) // Define o papel para o menu
       
-      // 2. Agora buscamos apenas os membros que pertencem à MESMA organização
+      // 2. Busca membros da organização
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
-        .eq('org_id', myProfile.org_id) // Filtro crucial para o isolamento
+        .eq('org_id', myProfile.org_id)
         .order('created_at', { ascending: false })
       
       if (!error && data) {
         setMembers(data as Member[])
       }
     }
-    
     setLoading(false)
   }
 
-  const handleCreateMember = async (e: FormEvent) => {
+  // --- FUNÇÕES DE MODAL ---
+  
+  const openCreateModal = () => {
+    setEditingMember(null) // Modo Criação
+    setFormData({ username: '', password: '', role: 'funcionario' })
+    setIsModalOpen(true)
+  }
+
+  const openEditModal = (member: Member) => {
+    setEditingMember(member) // Modo Edição
+    setFormData({ 
+        username: member.email.split('@')[0], // Pega só o nome antes do @
+        password: '', // Senha começa vazia (só preenche se quiser trocar)
+        role: member.role 
+    })
+    setIsModalOpen(true)
+  }
+
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
-    if (!currentOrgId) {
-      alert("Erro: Organização não identificada.")
-      return
-    }
+    if (!currentOrgId) return
     
-    setCreating(true)
+    setProcessing(true)
 
     try {
-      // Enviamos os dados junto com o orgId da empresa atual
-      const res = await fetch('/api/register', {
+      // Decide qual endpoint chamar: Criar ou Atualizar
+      const endpoint = editingMember ? '/api/update-user' : '/api/register'
+      
+      const bodyPayload = {
+        ...formData,
+        orgId: currentOrgId,
+        userId: editingMember?.id // Vai undefined se for criação, sem problemas
+      }
+
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          ...newUser, 
-          orgId: currentOrgId // Vincula o novo usuário à org atual
-        })
+        body: JSON.stringify(bodyPayload)
       })
 
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error)
+      if (!res.ok) throw new Error(data.error || 'Erro na operação')
 
       setIsModalOpen(false)
-      setNewUser({ username: '', password: '', role: 'funcionario' })
+      alert(editingMember ? 'Dados atualizados com sucesso!' : 'Membro criado com sucesso!')
       
       router.refresh()
       setTimeout(() => fetchSquad(), 800)
 
     } catch (error: any) {
-      alert('Erro ao criar: ' + error.message)
+      alert('Erro: ' + error.message)
     } finally {
-      setCreating(false)
+      setProcessing(false)
     }
   }
 
@@ -114,7 +136,6 @@ export default function SquadPage() {
       if (!res.ok) throw new Error('Falha ao deletar')
 
       setMembers(prev => prev.filter(m => m.id !== id))
-      router.refresh()
       alert(`Usuário ${displayUser} removido.`)
     } catch (error: any) {
       alert('Erro na exclusão: ' + error.message)
@@ -126,7 +147,7 @@ export default function SquadPage() {
   return (
     <div style={{ ...globalStyles.container, justifyContent: 'flex-start', background: '#f8fafc' }}>
       
-      {/* HEADER CENTRALIZADO E RESPONSIVO */}
+      {/* HEADER CENTRALIZADO */}
       <Header userRole={userRole} subtitle="GESTÃO DE EQUIPE" />
 
       <main style={{ width: '100%', maxWidth: '800px', padding: '30px 20px', flex: 1 }}>
@@ -137,7 +158,7 @@ export default function SquadPage() {
                 <p style={{ color: colors.textMuted, fontSize: '0.9rem', margin: '5px 0 0' }}>Administre quem pode acessar o sistema.</p>
             </div>
             <button 
-                onClick={() => setIsModalOpen(true)}
+                onClick={openCreateModal}
                 style={{ backgroundColor: colors.primary, color: 'white', border: 'none', padding: '12px 20px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}
             >
                 + Novo Membro
@@ -175,11 +196,28 @@ export default function SquadPage() {
                       </span>
                     </div>
                   </div>
-                  {!isMe && (
-                    <button onClick={() => handleRemoveMember(member.id, member.email)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444' }}>
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                  
+                  <div style={{ display: 'flex', gap: '10px' }}>
+                    {/* BOTÃO EDITAR (Lápis) */}
+                    <button 
+                        onClick={() => openEditModal(member)} 
+                        style={{ background: '#eff6ff', border: '1px solid #dbeafe', borderRadius: '6px', padding: '8px', cursor: 'pointer', color: '#3b82f6' }} 
+                        title="Editar Senha/Cargo"
+                    >
+                       ✏️
                     </button>
-                  )}
+
+                    {/* BOTÃO EXCLUIR (Lixeira) - Não pode se auto-excluir */}
+                    {!isMe && (
+                        <button 
+                            onClick={() => handleRemoveMember(member.id, member.email)} 
+                            style={{ background: '#fee2e2', border: '1px solid #fecaca', borderRadius: '6px', padding: '8px', cursor: 'pointer', color: '#ef4444' }} 
+                            title="Excluir Acesso"
+                        >
+                            🗑️
+                        </button>
+                    )}
+                  </div>
                 </div>
               )
             })}
@@ -188,30 +226,51 @@ export default function SquadPage() {
         )}
       </main>
 
+      {/* MODAL DE CRIAÇÃO / EDIÇÃO */}
       {isModalOpen && (
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(2px)' }}>
           <div style={{ ...globalStyles.card, width: '90%', maxWidth: '400px', padding: '30px' }}>
-            <h3 style={{ marginTop: 0, color: colors.primary, textAlign: 'center' }}>Novo Acesso</h3>
-            <form onSubmit={handleCreateMember}>
+            <h3 style={{ marginTop: 0, color: colors.primary, textAlign: 'center' }}>
+                {editingMember ? 'Editar Acesso' : 'Novo Acesso'}
+            </h3>
+            
+            <form onSubmit={handleSubmit}>
               <div style={{ marginBottom: '15px' }}>
-                <label style={{display: 'block', fontSize: '0.85rem', color: colors.textMuted, marginBottom: '5px'}}>Login do Funcionário</label>
-                <input required type="text" value={newUser.username} onChange={e => setNewUser({...newUser, username: e.target.value})} style={globalStyles.input} placeholder="Ex: marcos..." />
+                <label style={{display: 'block', fontSize: '0.85rem', color: colors.textMuted, marginBottom: '5px'}}>Login (E-mail)</label>
+                <input 
+                    required 
+                    type="text" 
+                    value={formData.username} 
+                    onChange={e => setFormData({...formData, username: e.target.value})} 
+                    style={{ ...globalStyles.input, backgroundColor: editingMember ? '#f1f5f9' : 'white', cursor: editingMember ? 'not-allowed' : 'text' }} 
+                    placeholder="Ex: marcos..." 
+                    disabled={!!editingMember} // Não pode mudar o email na edição, só a senha/cargo
+                />
               </div>
               <div style={{ marginBottom: '15px' }}>
-                <label style={{display: 'block', fontSize: '0.85rem', color: colors.textMuted, marginBottom: '5px'}}>Senha Inicial</label>
-                <input required type="text" value={newUser.password} onChange={e => setNewUser({...newUser, password: e.target.value})} style={globalStyles.input} placeholder="Mínimo 6 dígitos" />
+                <label style={{display: 'block', fontSize: '0.85rem', color: colors.textMuted, marginBottom: '5px'}}>
+                    {editingMember ? 'Nova Senha (Opcional)' : 'Senha Inicial'}
+                </label>
+                <input 
+                    type="text" 
+                    value={formData.password} 
+                    onChange={e => setFormData({...formData, password: e.target.value})} 
+                    style={globalStyles.input} 
+                    placeholder={editingMember ? "Deixe vazio para manter a atual" : "Mínimo 6 dígitos"} 
+                    required={!editingMember} // Obrigatório apenas ao criar
+                />
               </div>
               <div style={{ marginBottom: '20px' }}>
                 <label style={{display: 'block', fontSize: '0.85rem', color: colors.textMuted, marginBottom: '5px'}}>Permissão</label>
-                <select value={newUser.role} onChange={e => setNewUser({...newUser, role: e.target.value as any})} style={{...globalStyles.input, height: '52px'}}>
+                <select value={formData.role} onChange={e => setFormData({...formData, role: e.target.value})} style={{...globalStyles.input, height: '52px'}}>
                   <option value="funcionario">Funcionário</option>
                   <option value="admin">Administrador</option>
                 </select>
               </div>
               <div style={{ display: 'flex', gap: '10px' }}>
                 <button type="button" onClick={() => setIsModalOpen(false)} style={{ flex: 1, padding: '12px', borderRadius: '8px', border: '1px solid #ccc', background: 'transparent' }}>Cancelar</button>
-                <button type="submit" disabled={creating} style={{ ...globalStyles.buttonPrimary, flex: 1, marginTop: 0 }}>
-                    {creating ? 'CRIANDO...' : 'CRIAR CONTA'}
+                <button type="submit" disabled={processing} style={{ ...globalStyles.buttonPrimary, flex: 1, marginTop: 0 }}>
+                    {processing ? 'SALVANDO...' : (editingMember ? 'SALVAR' : 'CRIAR')}
                 </button>
               </div>
             </form>

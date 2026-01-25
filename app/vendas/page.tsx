@@ -33,7 +33,7 @@ export default function VendasPage() {
   const [loading, setLoading] = useState(true)
   const [dateFilter, setDateFilter] = useState(today)
   const [selectedOrder, setSelectedOrder] = useState<{id: string, label: string} | null>(null)
-  const [userRole, setUserRole] = useState<string | null>(null) // Para o Header
+  const [userRole, setUserRole] = useState<string | null>(null) // Para o Header e Permissões
   
   // Estado para os totais calculados
   const [totals, setTotals] = useState<DailyTotals>({ geral: 0, dinheiro: 0, digital: 0, fiado: 0 })
@@ -215,18 +215,21 @@ export default function VendasPage() {
                     R$ {order.total.toFixed(2)}
                   </div>
                   
-                  <button 
-                    onClick={(e) => handleDelete(e, order.id, order.label)}
-                    style={{ 
-                      background: '#fee2e2', border: 'none', cursor: 'pointer', 
-                      width: '36px', height: '36px', color: '#ef4444',
-                      borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: '1rem'
-                    }}
-                    title="Excluir Venda"
-                  >
-                    🗑️
-                  </button>
+                  {/* SÓ MOSTRA O BOTÃO SE FOR ADMIN */}
+                  {userRole === 'admin' && (
+                    <button 
+                      onClick={(e) => handleDelete(e, order.id, order.label)}
+                      style={{ 
+                        background: '#fee2e2', border: 'none', cursor: 'pointer', 
+                        width: '36px', height: '36px', color: '#ef4444',
+                        borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: '1rem'
+                      }}
+                      title="Excluir Venda"
+                    >
+                      🗑️
+                    </button>
+                  )}
                 </div>
               </div>
             ))

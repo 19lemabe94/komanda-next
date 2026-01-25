@@ -4,6 +4,8 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '../lib/supabaseClient'
 import { colors } from '../styles/theme'
 import { BrandLogo } from './BrandLogo'
+// IMPORTAMOS O NOVO MODAL
+import { BackupModal } from './BackupModal'
 
 interface HeaderProps {
   userRole?: string | null
@@ -13,22 +15,23 @@ interface HeaderProps {
 export function Header({ userRole, subtitle = 'OPERAÇÃO' }: HeaderProps) {
   const router = useRouter()
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+  const [isBackupOpen, setIsBackupOpen] = useState(false) // Estado do Modal Backup
 
-  // --- ESTILOS DESKTOP (Agora Robustos e Grandes) ---
+  // --- ESTILOS DESKTOP ---
   const desktopBtnStyle = {
     background: 'white', 
     border: `1px solid ${colors.border}`, 
-    borderRadius: '12px',           // Mais arredondado
-    padding: '12px 24px',           // Bem mais espaçoso
+    borderRadius: '12px',           
+    padding: '12px 24px',           
     color: colors.text, 
-    fontSize: '1.1rem',             // Fonte maior
-    fontWeight: 800,                // Negrito forte
+    fontSize: '1.1rem',             
+    fontWeight: 800,                
     cursor: 'pointer', 
     display: 'flex', 
     alignItems: 'center', 
     gap: '10px', 
     whiteSpace: 'nowrap' as 'nowrap',
-    boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', // Sombra elegante
+    boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)',
     transition: 'transform 0.1s'
   }
 
@@ -50,7 +53,6 @@ export function Header({ userRole, subtitle = 'OPERAÇÃO' }: HeaderProps) {
     boxShadow: '0 2px 5px rgba(0,0,0,0.03)'
   }
 
-  // --- ANIMAÇÃO HAMBURGUER ---
   const hamburgerLineStyle: CSSProperties = {
     height: '4px', width: '32px', backgroundColor: colors.primary, borderRadius: '4px',
     transition: 'all 0.3s ease', position: 'absolute',
@@ -82,6 +84,9 @@ export function Header({ userRole, subtitle = 'OPERAÇÃO' }: HeaderProps) {
             <button onClick={() => { router.push('/reports'); setIsMobileMenuOpen(false); }} style={mobileBtnStyle}>📈 Relatórios</button>
             <button onClick={() => { router.push('/products'); setIsMobileMenuOpen(false); }} style={mobileBtnStyle}>🍔 Cardápio</button>
             <button onClick={() => { router.push('/squad'); setIsMobileMenuOpen(false); }} style={mobileBtnStyle}>👥 Equipe</button>
+            
+            {/* BOTÃO BACKUP MOBILE */}
+            <button onClick={() => { setIsBackupOpen(true); setIsMobileMenuOpen(false); }} style={{ ...mobileBtnStyle, border: '2px dashed #3b82f6', color: '#2563eb' }}>💾 Backup</button>
           </>
         )}
         
@@ -95,29 +100,24 @@ export function Header({ userRole, subtitle = 'OPERAÇÃO' }: HeaderProps) {
       <style jsx global>{`
         .desktop-nav { display: none !important; }
         .mobile-hamburger { display: flex !important; }
-        /* Aumentei o breakpoint para 900px, assim tablets pequenos já pegam o menu mobile, 
-           e telas grandes pegam o menu desktop robusto */
         @media (min-width: 900px) {
           .desktop-nav { display: flex !important; align-items: center; gap: 15px; }
           .mobile-hamburger { display: none !important; }
         }
       `}</style>
 
-      {/* AUMENTO DA ALTURA DO HEADER PARA 100px */}
       <header style={{ width: '100%', backgroundColor: 'white', borderBottom: `1px solid ${colors.border}`, padding: '0 30px', height: '100px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', boxShadow: '0 4px 12px rgba(0,0,0,0.03)', position: 'sticky', top: 0, zIndex: 50 }}>
         
         <div style={{ display: 'flex', alignItems: 'center', gap: '18px' }}>
-          {/* LOGO MAIOR */}
           <BrandLogo size={48} color={colors.primary} />
           <div style={{ lineHeight: 1 }}>
-            {/* TEXTO KOMANDA MAIOR */}
             <span style={{ fontWeight: 900, color: colors.primary, display: 'block', fontSize: '1.6rem', letterSpacing: '-1px' }}>KOMANDA</span>
             <span style={{ fontSize: '0.8rem', color: colors.textMuted, textTransform: 'uppercase', fontWeight: 800, letterSpacing: '1px' }}>{subtitle}</span>
           </div>
         </div>
 
         <div>
-          {/* MENU DESKTOP ROBUSTO */}
+          {/* MENU DESKTOP */}
           <nav className="desktop-nav">
              <button onClick={() => router.push('/')} style={desktopBtnStyle}>🏠 INÍCIO</button>
              <button onClick={() => router.push('/vendas')} style={desktopBtnStyle}>💰 HISTÓRICO</button>
@@ -127,6 +127,8 @@ export function Header({ userRole, subtitle = 'OPERAÇÃO' }: HeaderProps) {
                  <button onClick={() => router.push('/reports')} style={desktopBtnStyle}>📈 KPIS</button>
                  <button onClick={() => router.push('/products')} style={desktopBtnStyle}>🍔 MENU</button>
                  <button onClick={() => router.push('/squad')} style={desktopBtnStyle}>👥 SQUAD</button>
+                 {/* BOTÃO BACKUP DESKTOP */}
+                 <button onClick={() => setIsBackupOpen(true)} style={{ ...desktopBtnStyle, border: '2px dashed #3b82f6', color: '#2563eb' }} title="Salvar Dados">💾</button>
                </>
              )}
              <button onClick={async () => { await supabase.auth.signOut(); router.push('/login') }} style={{ ...desktopBtnStyle, backgroundColor: '#fee2e2', color: '#ef4444', border: 'none', marginLeft: '10px' }}>SAIR</button>
@@ -151,6 +153,9 @@ export function Header({ userRole, subtitle = 'OPERAÇÃO' }: HeaderProps) {
       </header>
 
       {isMobileMenuOpen && <MobileMenuOverlay />}
+      
+      {/* RENDERIZA O MODAL SE ESTIVER ABERTO */}
+      {isBackupOpen && <BackupModal onClose={() => setIsBackupOpen(false)} />}
     </>
   )
 }
