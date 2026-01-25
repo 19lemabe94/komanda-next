@@ -3,7 +3,8 @@ import { useEffect, useState, FormEvent } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { useRouter } from 'next/navigation'
 import { colors, globalStyles } from '../styles/theme'
-import { BrandLogo } from '../components/BrandLogo'
+// Importamos o Header centralizado
+import { Header } from '../components/Header'
 
 type Member = {
   id: string
@@ -18,6 +19,7 @@ export default function SquadPage() {
   const [members, setMembers] = useState<Member[]>([])
   const [currentUserEmail, setCurrentUserEmail] = useState('')
   const [currentOrgId, setCurrentOrgId] = useState<string | null>(null)
+  const [userRole, setUserRole] = useState<string | null>(null) // Para o Header
   
   // Estados do Modal
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -35,7 +37,7 @@ export default function SquadPage() {
     
     setCurrentUserEmail(session.user.email || '')
 
-    // 1. Primeiro buscamos o perfil do usuário logado para saber a qual Org ele pertence
+    // 1. Primeiro buscamos o perfil do usuário logado
     const { data: myProfile } = await supabase
       .from('profiles')
       .select('org_id, role')
@@ -44,6 +46,7 @@ export default function SquadPage() {
 
     if (myProfile) {
       setCurrentOrgId(myProfile.org_id)
+      setUserRole(myProfile.role) // Define o papel para o menu
       
       // 2. Agora buscamos apenas os membros que pertencem à MESMA organização
       const { data, error } = await supabase
@@ -120,47 +123,18 @@ export default function SquadPage() {
     }
   }
 
-  const navBtnStyle = {
-    background: 'white', border: `1px solid ${colors.border}`, borderRadius: '6px',
-    padding: '8px 16px', color: colors.text, fontSize: '0.85rem', fontWeight: 600,
-    cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px'
-  }
-
   return (
     <div style={{ ...globalStyles.container, justifyContent: 'flex-start', background: '#f8fafc' }}>
       
-      <header style={{
-        width: '100%', backgroundColor: 'white', borderBottom: `1px solid ${colors.border}`,
-        padding: '0 20px', height: '70px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        boxShadow: '0 2px 4px rgba(0,0,0,0.02)'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-          <BrandLogo size={36} color={colors.primary} />
-          <div style={{ lineHeight: 1 }}>
-            <span style={{ fontWeight: 800, color: colors.primary, display: 'block' }}>KOMANDA</span>
-            <span style={{ fontSize: '0.65rem', color: colors.textMuted, textTransform: 'uppercase' }}>Squad</span>
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <button onClick={() => { router.push('/'); router.refresh(); }} style={navBtnStyle}>🏠 Comandas</button>
-          <button onClick={() => { router.push('/reports'); router.refresh(); }} style={navBtnStyle}>📈 Relatórios</button>
-          <button onClick={() => { router.push('/products'); router.refresh(); }} style={navBtnStyle}>🍔 Menu</button>
-          <button 
-            onClick={async () => { await supabase.auth.signOut(); router.push('/login') }}
-            style={{ ...navBtnStyle, backgroundColor: colors.errorBg, color: colors.errorText, border: 'none' }}
-          >
-            Sair
-          </button>
-        </div>
-      </header>
+      {/* HEADER CENTRALIZADO E RESPONSIVO */}
+      <Header userRole={userRole} subtitle="GESTÃO DE EQUIPE" />
 
       <main style={{ width: '100%', maxWidth: '800px', padding: '30px 20px', flex: 1 }}>
         
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px', flexWrap: 'wrap', gap: '15px' }}>
             <div>
-                <h2 style={{ fontSize: '1.2rem', color: colors.text, margin: 0 }}>Gestão de Equipe</h2>
-                <p style={{ color: colors.textMuted, fontSize: '0.9rem', margin: '5px 0 0' }}>Administre os acessos da sua organização.</p>
+                <h2 style={{ fontSize: '1.2rem', color: colors.text, margin: 0 }}>Gestão de Acessos</h2>
+                <p style={{ color: colors.textMuted, fontSize: '0.9rem', margin: '5px 0 0' }}>Administre quem pode acessar o sistema.</p>
             </div>
             <button 
                 onClick={() => setIsModalOpen(true)}
@@ -171,7 +145,7 @@ export default function SquadPage() {
         </div>
 
         {loading ? (
-          <div style={{ textAlign: 'center', padding: '40px', color: colors.textMuted }}>Sincronizando...</div>
+          <div style={{ textAlign: 'center', padding: '40px', color: colors.textMuted }}>Sincronizando equipe...</div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             {members.map(member => {
@@ -180,7 +154,8 @@ export default function SquadPage() {
                 <div key={member.id} style={{ 
                     backgroundColor: 'white', padding: '15px 20px', borderRadius: '12px', 
                     border: `1px solid ${colors.border}`, display: 'flex', 
-                    justifyContent: 'space-between', alignItems: 'center'
+                    justifyContent: 'space-between', alignItems: 'center',
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.02)'
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                     <div style={{ 
@@ -208,12 +183,13 @@ export default function SquadPage() {
                 </div>
               )
             })}
+            {members.length === 0 && <p style={{textAlign: 'center', color: colors.textMuted}}>Nenhum membro encontrado.</p>}
           </div>
         )}
       </main>
 
       {isModalOpen && (
-        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(2px)' }}>
           <div style={{ ...globalStyles.card, width: '90%', maxWidth: '400px', padding: '30px' }}>
             <h3 style={{ marginTop: 0, color: colors.primary, textAlign: 'center' }}>Novo Acesso</h3>
             <form onSubmit={handleCreateMember}>

@@ -3,7 +3,8 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { useRouter } from 'next/navigation'
 import { colors, globalStyles } from '../styles/theme'
-import { BrandLogo } from '../components/BrandLogo'
+// Importamos o Header centralizado
+import { Header } from '../components/Header'
 import { 
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, 
   PieChart, Pie, Cell, Legend 
@@ -32,6 +33,7 @@ export default function ReportsPage() {
   const [loading, setLoading] = useState(true)
   const [activeFilter, setActiveFilter] = useState('hoje') // Para marcar o botão ativo
   const [myOrgId, setMyOrgId] = useState<string | null>(null)
+  const [userRole, setUserRole] = useState<string | null>(null) // Para o Header
 
   const [stats, setStats] = useState<FinancialStats>({ total: 0, dinheiro: 0, fiado: 0, digital: 0, ticket_medio: 0 })
   const [topProducts, setTopProducts] = useState<TopProduct[]>([])
@@ -100,6 +102,7 @@ export default function ReportsPage() {
     }
 
     setMyOrgId(profile.org_id)
+    setUserRole(profile.role) // Define o papel para o Header
 
     // Cores das categorias
     const { data: catSettings } = await supabase
@@ -160,12 +163,6 @@ export default function ReportsPage() {
   }
 
   // Estilos Padronizados
-  const navBtnStyle = {
-    background: 'white', border: `1px solid ${colors.border}`, borderRadius: '6px',
-    padding: '8px 14px', color: colors.text, fontSize: '0.85rem', fontWeight: 600,
-    cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', transition: 'all 0.2s'
-  }
-
   const filterBtnStyle = (isActive: boolean) => ({
     padding: '8px 16px', borderRadius: '8px', 
     border: isActive ? `1px solid ${colors.primary}` : '1px solid #e2e8f0', 
@@ -189,35 +186,8 @@ export default function ReportsPage() {
   return (
     <div style={{ ...globalStyles.container, justifyContent: 'flex-start', background: '#f8fafc' }}>
       
-      {/* HEADER PADRONIZADO */}
-      <header style={{ 
-        width: '100%', backgroundColor: 'white', borderBottom: `1px solid ${colors.border}`, 
-        padding: '0 20px', height: '70px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        boxShadow: '0 2px 4px rgba(0,0,0,0.02)', position: 'sticky', top: 0, zIndex: 50
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-          <BrandLogo size={36} color={colors.primary} />
-          <div style={{ lineHeight: 1 }}>
-            <span style={{ fontWeight: 800, color: colors.primary, display: 'block' }}>KOMANDA</span>
-            <span style={{ fontSize: '0.65rem', color: colors.textMuted, textTransform: 'uppercase', fontWeight: 700 }}>
-              DASHBOARD / INTELIGÊNCIA
-            </span>
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <button onClick={() => router.push('/')} style={navBtnStyle}>🏠 Início</button>
-          <button onClick={() => router.push('/vendas')} style={navBtnStyle}>💰 Vendas</button>
-          <button onClick={() => router.push('/products')} style={navBtnStyle}>🍔 Menu</button>
-          <button onClick={() => router.push('/squad')} style={navBtnStyle}>👥 Squad</button>
-          <button 
-            onClick={async () => { await supabase.auth.signOut(); router.push('/login') }}
-            style={{ ...navBtnStyle, backgroundColor: colors.errorBg, color: colors.errorText, border: 'none', marginLeft: '5px' }}
-          >
-            Sair
-          </button>
-        </div>
-      </header>
+      {/* HEADER CENTRALIZADO E RESPONSIVO */}
+      <Header userRole={userRole} subtitle="DASHBOARD / INTELIGÊNCIA" />
 
       <main style={{ width: '100%', maxWidth: '1200px', padding: '30px 20px', flex: 1 }}>
         

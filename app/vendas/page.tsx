@@ -3,7 +3,8 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { useRouter } from 'next/navigation'
 import { colors, globalStyles } from '../styles/theme'
-import { BrandLogo } from '../components/BrandLogo'
+// Importamos o Header centralizado
+import { Header } from '../components/Header'
 import { OrderDetailsModal } from '../components/OrderDetailsModal'
 
 type ClosedOrder = {
@@ -32,6 +33,7 @@ export default function VendasPage() {
   const [loading, setLoading] = useState(true)
   const [dateFilter, setDateFilter] = useState(today)
   const [selectedOrder, setSelectedOrder] = useState<{id: string, label: string} | null>(null)
+  const [userRole, setUserRole] = useState<string | null>(null) // Para o Header
   
   // Estado para os totais calculados
   const [totals, setTotals] = useState<DailyTotals>({ geral: 0, dinheiro: 0, digital: 0, fiado: 0 })
@@ -45,13 +47,16 @@ export default function VendasPage() {
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) { router.push('/login'); return }
 
+    // Busca org_id E role para o menu funcionar corretamente
     const { data: profile } = await supabase
       .from('profiles')
-      .select('org_id')
+      .select('org_id, role')
       .eq('id', session.user.id)
       .single()
 
     if (profile?.org_id) {
+      setUserRole(profile.role) // Define o papel do usuário
+
       // Ajuste de fuso horário simples para garantir o dia inteiro UTC
       const startOfDay = `${dateFilter}T00:00:00.000Z`
       const endOfDay = `${dateFilter}T23:59:59.999Z`
@@ -113,13 +118,6 @@ export default function VendasPage() {
     }
   }
 
-  // Estilos
-  const navBtnStyle = {
-    background: 'white', border: `1px solid ${colors.border}`, borderRadius: '6px',
-    padding: '8px 14px', color: colors.text, fontSize: '0.85rem', fontWeight: 600,
-    cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px'
-  }
-
   const kpiCardStyle = {
     flex: 1, minWidth: '140px', padding: '15px 20px', borderRadius: '12px',
     border: `1px solid ${colors.border}`, backgroundColor: 'white',
@@ -130,23 +128,8 @@ export default function VendasPage() {
   return (
     <div style={{ ...globalStyles.container, justifyContent: 'flex-start', background: '#f8fafc' }}>
       
-      {/* HEADER PADRONIZADO */}
-      <header style={{ 
-        width: '100%', backgroundColor: 'white', borderBottom: `1px solid ${colors.border}`, 
-        padding: '0 20px', height: '70px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        boxShadow: '0 2px 4px rgba(0,0,0,0.02)', position: 'sticky', top: 0, zIndex: 50
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-          <BrandLogo size={36} color={colors.primary} />
-          <div style={{ lineHeight: 1 }}>
-            <span style={{ fontWeight: 800, color: colors.primary, display: 'block' }}>KOMANDA</span>
-            <span style={{ fontSize: '0.65rem', color: colors.textMuted, textTransform: 'uppercase', fontWeight: 700 }}>
-              HISTÓRICO DE VENDAS
-            </span>
-          </div>
-        </div>
-        <button onClick={() => router.push('/')} style={navBtnStyle}>🏠 Voltar ao Início</button>
-      </header>
+      {/* HEADER CENTRALIZADO E RESPONSIVO */}
+      <Header userRole={userRole} subtitle="HISTÓRICO DE VENDAS" />
 
       <main style={{ width: '100%', maxWidth: '900px', padding: '30px 20px', flex: 1 }}>
         
@@ -251,7 +234,7 @@ export default function VendasPage() {
         </div>
       </main>
 
-      {/* MODAL DE DETALHES (Reutilizando o mesmo componente poderoso) */}
+      {/* MODAL DE DETALHES */}
       {selectedOrder && (
         <OrderDetailsModal 
           orderId={selectedOrder.id}

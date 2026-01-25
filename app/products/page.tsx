@@ -3,7 +3,8 @@ import { useEffect, useState, FormEvent } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { useRouter } from 'next/navigation'
 import { colors, globalStyles } from '../styles/theme'
-import { BrandLogo } from '../components/BrandLogo'
+// Importamos o Header centralizado
+import { Header } from '../components/Header'
 
 // Tipos
 type Product = {
@@ -26,6 +27,7 @@ export default function ProductsPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(true)
   const [myOrgId, setMyOrgId] = useState<string | null>(null)
+  const [userRole, setUserRole] = useState<string | null>(null) // Para o Header
   
   // Listas de Dados
   const [products, setProducts] = useState<Product[]>([])
@@ -59,15 +61,16 @@ export default function ProductsPage() {
       return
     }
 
-    // Busca o org_id do perfil logado
+    // Busca o perfil para pegar org_id e role
     const { data: profile } = await supabase
       .from('profiles')
-      .select('org_id')
+      .select('org_id, role')
       .eq('id', session.user.id)
       .single()
 
     if (profile?.org_id) {
       setMyOrgId(profile.org_id)
+      setUserRole(profile.role) // Importante para o Header
       fetchData(profile.org_id)
     } else {
       router.push('/setup')
@@ -120,7 +123,7 @@ export default function ProductsPage() {
       description: prodForm.description,
       price: priceNumber,
       category: prodForm.category,
-      org_id: myOrgId // Vínculo com a Organização
+      org_id: myOrgId
     }])
 
     if (!error) {
@@ -149,7 +152,7 @@ export default function ProductsPage() {
     const { error } = await supabase.from('categories').insert([{
       name: catName.trim(),
       color: randomColor,
-      org_id: myOrgId // Vínculo com a Organização
+      org_id: myOrgId
     }])
 
     if (!error) {
@@ -169,45 +172,15 @@ export default function ProductsPage() {
     return found ? found.color : '#94a3b8'
   }
 
-  const navBtnStyle = {
-    background: 'white', border: `1px solid ${colors.border}`, borderRadius: '6px',
-    padding: '8px 16px', color: colors.text, fontSize: '0.85rem', fontWeight: 600,
-    cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px'
-  }
-
   return (
     <div style={{ ...globalStyles.container, justifyContent: 'flex-start', background: '#f8fafc' }}>
       
-      {/* HEADER PADRONIZADO */}
-      <header style={{
-        width: '100%', backgroundColor: 'white', borderBottom: `1px solid ${colors.border}`,
-        padding: '0 20px', height: '70px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        boxShadow: '0 2px 4px rgba(0,0,0,0.02)'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-          <BrandLogo size={36} color={colors.primary} />
-          <div style={{ lineHeight: 1 }}>
-            <span style={{ fontWeight: 800, color: colors.primary, display: 'block' }}>KOMANDA</span>
-            <span style={{ fontSize: '0.65rem', color: colors.textMuted, textTransform: 'uppercase' }}>Menu</span>
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <button onClick={() => { router.push('/'); router.refresh(); }} style={navBtnStyle}>🏠 Comandas</button>
-          <button onClick={() => { router.push('/reports'); router.refresh(); }} style={navBtnStyle}>📈 Relatórios</button>
-          <button onClick={() => { router.push('/squad'); router.refresh(); }} style={navBtnStyle}>👥 Squad</button>
-          <button 
-            onClick={async () => { await supabase.auth.signOut(); router.push('/login') }}
-            style={{ ...navBtnStyle, backgroundColor: colors.errorBg, color: colors.errorText, border: 'none' }}
-          >
-            Sair
-          </button>
-        </div>
-      </header>
+      {/* HEADER CENTRALIZADO E RESPONSIVO */}
+      <Header userRole={userRole} subtitle="MENU / CARDÁPIO" />
 
       <main style={{ width: '100%', maxWidth: '800px', padding: '30px 20px', flex: 1 }}>
         
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px', alignItems: 'center' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px', alignItems: 'center', flexWrap: 'wrap', gap: '15px' }}>
           <span style={{ color: colors.textMuted, fontWeight: 600 }}>{products.length} itens cadastrados</span>
           
           <div style={{ display: 'flex', gap: '10px' }}>
@@ -233,7 +206,7 @@ export default function ProductsPage() {
           </div>
         </div>
 
-        {loading ? <p>Carregando...</p> : (
+        {loading ? <p style={{textAlign: 'center', color: colors.textMuted}}>Carregando cardápio...</p> : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             {products.map(item => (
               <div key={item.id} style={{
@@ -242,7 +215,7 @@ export default function ProductsPage() {
                 boxShadow: '0 2px 4px rgba(0,0,0,0.02)'
               }}>
                 <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
                     <span style={{ fontWeight: 800, color: colors.text, fontSize: '1.1rem' }}>{item.name}</span>
                     <span style={{ 
                       fontSize: '0.65rem', padding: '2px 8px', borderRadius: '12px', 
@@ -262,20 +235,25 @@ export default function ProductsPage() {
                   <span style={{ fontWeight: 'bold', color: colors.text }}>R$ {item.price.toFixed(2)}</span>
                   <button 
                     onClick={() => handleDeleteProduct(item.id, item.name)}
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', padding: '5px' }}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', padding: '5px', fontSize: '1.1rem' }}
                   >
                     🗑️
                   </button>
                 </div>
               </div>
             ))}
+            {products.length === 0 && (
+                <div style={{textAlign: 'center', padding: '40px', color: colors.textMuted, border: '2px dashed #e2e8f0', borderRadius: '12px'}}>
+                    Nenhum produto cadastrado. Comece criando categorias e produtos!
+                </div>
+            )}
           </div>
         )}
       </main>
 
       {/* MODAL 1: PRODUTO */}
       {showProductModal && (
-        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(2px)' }}>
           <div style={{ ...globalStyles.card, width: '90%', maxWidth: '400px', padding: '30px' }}>
             <h3 style={{ marginTop: 0, color: colors.primary }}>Novo Item</h3>
             <form onSubmit={handleCreateProduct}>
@@ -321,7 +299,7 @@ export default function ProductsPage() {
 
       {/* MODAL 2: CATEGORIAS */}
       {showCategoryModal && (
-        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 60, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(2px)' }}>
           <div style={{ ...globalStyles.card, width: '90%', maxWidth: '350px', padding: '30px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
               <h3 style={{ margin: 0, color: colors.text }}>Categorias</h3>
