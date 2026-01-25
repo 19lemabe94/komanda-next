@@ -7,10 +7,25 @@ import { colors, globalStyles } from './styles/theme'
 import { Header } from './components/Header'
 import { OrderDetailsModal } from './components/OrderDetailsModal'
 
-// ... (Mantenha os types Order aqui ou num arquivo types.ts) ...
 type Order = {
   id: string; label: string; status: 'aberta' | 'pagamento' | 'concluida' | 'cancelada'; total: number; org_id: string;
 }
+
+// --- LISTA DE VERSÍCULOS ---
+const VERSICULOS = [
+  { text: "O Senhor é o meu pastor; de nada terei falta.", ref: "Salmos 23:1" },
+  { text: "Tudo posso naquele que me fortalece.", ref: "Filipenses 4:13" },
+  { text: "Entregue o seu caminho ao Senhor; confie nele, e ele agirá.", ref: "Salmos 37:5" },
+  { text: "Até aqui nos ajudou o Senhor.", ref: "1 Samuel 7:12" },
+  { text: "Se Deus é por nós, quem será contra nós?", ref: "Romanos 8:31" },
+  { text: "O Senhor é a minha luz e a minha salvação; de quem terei temor?", ref: "Salmos 27:1" },
+  { text: "Esforçai-vos, e ele fortalecerá o vosso coração.", ref: "Salmos 31:24" },
+  { text: "Mil cairão ao teu lado, e dez mil à tua direita, mas não chegará a ti.", ref: "Salmos 91:7" },
+  { text: "Porque eu bem sei os pensamentos que tenho a vosso respeito, diz o Senhor.", ref: "Jeremias 29:11" },
+  { text: "Alegrai-vos sempre no Senhor; outra vez digo, alegrai-vos.", ref: "Filipenses 4:4" },
+  { text: "O amor é paciente, o amor é bondoso.", ref: "1 Coríntios 13:4" },
+  { text: "Não tenhas medo, pois eu estou contigo.", ref: "Isaías 41:10" }
+]
 
 export default function Dashboard() {
   const router = useRouter()
@@ -26,7 +41,25 @@ export default function Dashboard() {
   const [creating, setCreating] = useState(false)
   const [feedback, setFeedback] = useState('')
 
-  useEffect(() => { checkSessionAndFetch() }, [])
+  // Estados de Tempo e Versículo
+  const [currentTime, setCurrentTime] = useState('')
+  const [dailyVerse, setDailyVerse] = useState(VERSICULOS[0])
+
+  useEffect(() => { 
+    checkSessionAndFetch()
+    
+    // 1. Relógio em Tempo Real
+    const timer = setInterval(() => {
+      const now = new Date()
+      setCurrentTime(now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }))
+    }, 1000)
+
+    // 2. Escolher Versículo do Dia
+    const dayOfYear = Math.floor((new Date().getTime() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 1000 / 60 / 60 / 24)
+    setDailyVerse(VERSICULOS[dayOfYear % VERSICULOS.length])
+
+    return () => clearInterval(timer)
+  }, [])
 
   const checkSessionAndFetch = async () => {
     const { data: { session } } = await supabase.auth.getSession()
@@ -43,7 +76,6 @@ export default function Dashboard() {
     setLoading(false)
   }
 
-  // ... (Mantenha fetchOrders, handleDeleteOrder e handleCreateOrder iguais) ...
   const fetchOrders = async (orgId?: string) => {
     const targetOrgId = orgId || myOrgId
     if (!targetOrgId) return
@@ -72,16 +104,53 @@ export default function Dashboard() {
 
   if (loading) return null
 
+  // Data Formatada
+  const dateStr = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })
+
   return (
     <div style={{ ...globalStyles.container, justifyContent: 'flex-start', background: '#f8fafc' }}>
       
-      {/* HEADER CENTRALIZADO: Só muda o subtitle se quiser */}
       <Header userRole={userRole} subtitle="OPERAÇÃO" />
 
       <main style={{ width: '100%', maxWidth: '1200px', padding: '20px', flex: 1 }}>
-        <div style={{ marginBottom: '25px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h2 style={{ fontSize: '1.4rem', color: colors.text, margin: 0, fontWeight: 800 }}>Vendas em Aberto</h2>
-            <span style={{ fontSize: '0.85rem', color: colors.textMuted, fontWeight: 600 }}>{new Date().toLocaleDateString('pt-BR')}</span>
+        
+        {/* --- HEADER DO DASHBOARD --- */}
+        <div style={{ 
+          marginBottom: '25px', padding: '25px 20px', backgroundColor: 'white', borderRadius: '16px', 
+          border: `1px solid ${colors.border}`, boxShadow: '0 2px 4px rgba(0,0,0,0.02)',
+          display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center'
+        }}>
+           {/* HORA GRANDE */}
+           <div style={{ fontSize: '2.5rem', fontWeight: 900, color: colors.primary, lineHeight: 1 }}>
+             {currentTime || '--:--'}
+           </div>
+           
+           {/* DATA */}
+           <div style={{ fontSize: '0.9rem', color: colors.textMuted, textTransform: 'capitalize', marginBottom: '20px' }}>
+             {dateStr}
+           </div>
+
+           {/* VERSÍCULO DESTAQUE (Discreto) */}
+           <div style={{ 
+             backgroundColor: '#f8fafc',  // Cinza muito claro
+             color: '#475569',            // Cinza chumbo (legível e discreto)
+             padding: '12px 20px', 
+             borderRadius: '12px', 
+             border: `1px solid ${colors.border}`, 
+             maxWidth: '500px', 
+             width: '100%'
+           }}>
+             <p style={{ margin: 0, fontStyle: 'italic', fontWeight: 600, fontSize: '0.9rem', lineHeight: '1.4' }}>“{dailyVerse.text}”</p>
+             <span style={{ display: 'block', fontSize: '0.7rem', marginTop: '6px', fontWeight: 800, textTransform: 'uppercase', color: '#94a3b8' }}>{dailyVerse.ref}</span>
+           </div>
+        </div>
+
+        {/* TÍTULO DA SEÇÃO */}
+        <div style={{ marginBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h2 style={{ fontSize: '1.2rem', color: colors.text, margin: 0, fontWeight: 800 }}>Mesas Abertas</h2>
+            <span style={{ fontSize: '0.85rem', fontWeight: 700, color: colors.primary, backgroundColor: '#e0f2fe', padding: '4px 10px', borderRadius: '12px' }}>
+               {orders.length} ativas
+            </span>
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '15px' }}>
@@ -117,7 +186,7 @@ export default function Dashboard() {
         </div>
       </main>
 
-      {/* Modais (reutilizados) */}
+      {/* Modais */}
       {selectedOrder && <OrderDetailsModal orderId={selectedOrder.id} label={selectedOrder.label} onClose={() => setSelectedOrder(null)} onUpdate={() => fetchOrders(myOrgId!)} />}
       
       {isCreateModalOpen && (

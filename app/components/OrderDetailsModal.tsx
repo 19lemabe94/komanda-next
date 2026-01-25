@@ -89,11 +89,13 @@ export function OrderDetailsModal({ orderId, label, onClose, onUpdate }: Props) 
 
   const localTotal = items.reduce((acc, item) => acc + (item.product_price_snapshot * item.quantity), 0)
 
-  // Estilos
+  // --- ESTILOS VISUAIS AJUSTADOS ---
   const qtyBtnStyle = { 
-    flex: 1, padding: '15px', border: 'none', background: '#f1f5f9', cursor: 'pointer', 
-    fontWeight: '900', fontSize: '1.5rem', color: colors.primary, borderRadius: '8px' 
+    flex: 1, height: '45px', border: 'none', background: '#f1f5f9', cursor: 'pointer', 
+    fontWeight: '900', fontSize: '1.5rem', color: colors.primary, borderRadius: '8px',
+    display: 'flex', alignItems: 'center', justifyContent: 'center'
   }
+  
   const btnPayStyle = (bg: string) => ({
     backgroundColor: bg, color: 'white', border: 'none', padding: '15px', borderRadius: '10px', 
     fontWeight: 700, cursor: 'pointer', display: 'flex', flexDirection: 'column' as 'column', alignItems: 'center', gap: '5px'
@@ -101,16 +103,32 @@ export function OrderDetailsModal({ orderId, label, onClose, onUpdate }: Props) 
 
   return (
     <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.8)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '10px', backdropFilter: 'blur(3px)' }}>
-      <div style={{ backgroundColor: '#fff', width: '100%', maxWidth: '550px', height: '95vh', maxHeight: '800px', borderRadius: '20px', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      {/* AJUSTE CRÍTICO AQUI: 
+         - Usamos maxHeight com 'dvh' (Dynamic Viewport Height) para respeitar a barra do navegador mobile.
+         - Reduzimos a altura geral para 85dvh para dar uma margem de segurança.
+      */}
+      <div style={{ 
+          backgroundColor: '#fff', 
+          width: '100%', 
+          maxWidth: '550px', 
+          height: 'auto',          // Deixa crescer conforme precisa
+          maxHeight: '90vh',       // Trava em 90% da tela normal
+          borderRadius: '16px', 
+          display: 'flex', 
+          flexDirection: 'column', 
+          overflow: 'hidden',
+          boxShadow: '0 10px 25px rgba(0,0,0,0.2)'
+      }}>
         
-        <div style={{ padding: '15px 20px', borderBottom: `1px solid ${colors.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'white' }}>
-          <h2 style={{ margin: 0, fontSize: '1.5rem', color: colors.primary, fontWeight: 900 }}>{label}</h2>
-          <button onClick={onClose} style={{ border: 'none', background: '#f1f5f9', width: '36px', height: '36px', borderRadius: '50%', fontSize: '1.1rem', cursor: 'pointer' }}>✕</button>
+        {/* HEADER MENOR */}
+        <div style={{ padding: '12px 15px', borderBottom: `1px solid ${colors.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'white' }}>
+          <h2 style={{ margin: 0, fontSize: '1.3rem', color: colors.primary, fontWeight: 900, textTransform: 'capitalize' }}>{label}</h2>
+          <button onClick={onClose} style={{ border: 'none', background: '#f1f5f9', width: '32px', height: '32px', borderRadius: '50%', fontSize: '1rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
         </div>
 
         {isPaymentStep ? (
           <div style={{ flex: 1, padding: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', backgroundColor: '#fafafa', overflowY: 'auto' }}>
-            <div style={{ fontSize: '3rem', fontWeight: 900, color: '#166534', marginBottom: '30px' }}>R$ {localTotal.toFixed(2)}</div>
+            <div style={{ fontSize: '3rem', fontWeight: 900, color: '#166534', marginBottom: '20px' }}>R$ {localTotal.toFixed(2)}</div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', width: '100%', marginBottom: '20px' }}>
               <button onClick={() => handleFinishOrder('pix')} style={btnPayStyle('#06b6d4')}>💠 PIX</button>
               <button onClick={() => handleFinishOrder('dinheiro')} style={btnPayStyle('#22c55e')}>💵 DINHEIRO</button>
@@ -122,48 +140,52 @@ export function OrderDetailsModal({ orderId, label, onClose, onUpdate }: Props) 
           </div>
         ) : (
           <>
-            <div style={{ flex: 1, overflowY: 'auto', padding: '15px', backgroundColor: '#f8fafc' }}>
-              {items.map(item => (
-                <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', background: 'white', borderRadius: '10px', marginBottom: '8px', boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}>
-                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                    <span style={{ background: '#e0f2fe', color: '#0369a1', padding: '4px 8px', borderRadius: '6px', fontWeight: 800 }}>{item.quantity}x</span>
-                    <div>
-                      <div style={{ fontWeight: 700, color: '#334155' }}>{item.product_name_snapshot}</div>
-                      <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Unit: R$ {item.product_price_snapshot.toFixed(2)}</div>
+            {/* LISTA DE ITENS (Flex 1 para ocupar o espaço que sobrar) */}
+            <div style={{ flex: 1, overflowY: 'auto', padding: '10px', backgroundColor: '#f8fafc' }}>
+              {items.length === 0 ? (
+                 <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontSize: '0.9rem' }}>Nenhum item lançado</div>
+              ) : (
+                 items.map(item => (
+                  <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', background: 'white', borderRadius: '10px', marginBottom: '8px', boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}>
+                    <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                      <span style={{ background: '#e0f2fe', color: '#0369a1', padding: '2px 8px', borderRadius: '6px', fontWeight: 800, fontSize: '0.9rem' }}>{item.quantity}</span>
+                      <div>
+                        <div style={{ fontWeight: 700, color: '#334155', fontSize: '0.95rem' }}>{item.product_name_snapshot}</div>
+                        <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Unit: R$ {item.product_price_snapshot.toFixed(2)}</div>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                      <span style={{ fontWeight: 800, color: '#334155', fontSize: '0.95rem' }}>R$ {(item.product_price_snapshot * item.quantity).toFixed(2)}</span>
+                      <button onClick={() => handleRemoveItem(item.id)} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: '1rem' }}>🗑️</button>
                     </div>
                   </div>
-                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                    <span style={{ fontWeight: 800, color: '#334155' }}>R$ {(item.product_price_snapshot * item.quantity).toFixed(2)}</span>
-                    <button onClick={() => handleRemoveItem(item.id)} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: '1.2rem' }}>🗑️</button>
-                  </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
 
-            {/* AREA DE LANÇAMENTO */}
-            <div style={{ padding: '15px', background: 'white', borderTop: `1px solid ${colors.border}`, boxShadow: '0 -4px 10px rgba(0,0,0,0.05)' }}>
+            {/* AREA DE LANÇAMENTO (Compacta) */}
+            <div style={{ padding: '12px', background: 'white', borderTop: `1px solid ${colors.border}`, boxShadow: '0 -4px 10px rgba(0,0,0,0.05)' }}>
               
-              {/* CONTROLE DE QUANTIDADE GRANDE */}
-              <div style={{ display: 'flex', gap: '15px', marginBottom: '15px' }}>
+              {/* CONTROLE DE QUANTIDADE E SELEÇÃO */}
+              <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
                  <button onClick={() => setQuantity(Math.max(1, quantity - 1))} style={qtyBtnStyle}>-</button>
-                 <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem', fontWeight: 900, background: '#f8fafc', borderRadius: '8px' }}>
+                 <div style={{ width: '50px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem', fontWeight: 900, background: '#f8fafc', borderRadius: '8px' }}>
                     {quantity}
                  </div>
                  <button onClick={() => setQuantity(quantity + 1)} style={qtyBtnStyle}>+</button>
               </div>
 
-              {/* SELEÇÃO E BOTÃO LANÇAR */}
               <div style={{ display: 'flex', gap: '10px' }}>
                 <select 
                   value={selectedProduct} onChange={e => setSelectedProduct(e.target.value)} 
-                  style={{ flex: 2, height: '55px', padding: '0 10px', borderRadius: '10px', border: `1px solid ${colors.border}`, fontWeight: 600, fontSize: '1rem', background: 'white' }}
+                  style={{ flex: 2, height: '50px', padding: '0 10px', borderRadius: '8px', border: `1px solid ${colors.border}`, fontWeight: 700, fontSize: '1rem', background: 'white' }}
                 >
-                  <option value="">👇 Selecionar...</option>
+                  <option value="">👇 Produto...</option>
                   {products.map(p => <option key={p.id} value={p.id}>{p.name} - R$ {p.price.toFixed(2)}</option>)}
                 </select>
                 <button 
                   onClick={handleAddItem} disabled={!selectedProduct || loading}
-                  style={{ flex: 1, borderRadius: '10px', background: !selectedProduct ? '#ccc' : colors.primary, color: 'white', border: 'none', fontWeight: 800, fontSize: '1rem' }}
+                  style={{ flex: 1, borderRadius: '8px', background: !selectedProduct ? '#ccc' : colors.primary, color: 'white', border: 'none', fontWeight: 800, fontSize: '0.9rem' }}
                 >
                   LANÇAR
                 </button>
@@ -171,14 +193,14 @@ export function OrderDetailsModal({ orderId, label, onClose, onUpdate }: Props) 
             </div>
 
             {/* RODAPÉ TOTAL */}
-            <div style={{ padding: '15px 20px', background: '#f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ padding: '12px 15px', background: '#f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
-                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: colors.textMuted }}>TOTAL MESA</span>
-                <div style={{ fontSize: '1.8rem', fontWeight: 900, color: colors.primary, lineHeight: 1 }}>R$ {localTotal.toFixed(2)}</div>
+                <span style={{ fontSize: '0.65rem', fontWeight: 700, color: colors.textMuted, textTransform: 'uppercase' }}>TOTAL MESA</span>
+                <div style={{ fontSize: '1.6rem', fontWeight: 900, color: colors.primary, lineHeight: 1 }}>R$ {localTotal.toFixed(2)}</div>
               </div>
-              <div style={{ display: 'flex', gap: '10px' }}>
-                <button onClick={handlePrint} style={{ padding: '12px', borderRadius: '8px', border: '1px solid #ccc', background: 'white', fontSize: '1.2rem' }}>🖨️</button>
-                <button onClick={() => setIsPaymentStep(true)} disabled={items.length === 0} style={{ padding: '12px 20px', borderRadius: '8px', background: items.length > 0 ? '#16a34a' : '#cbd5e1', color: 'white', fontWeight: 800, border: 'none' }}>FECHAR ($)</button>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button onClick={handlePrint} style={{ padding: '10px', borderRadius: '8px', border: '1px solid #ccc', background: 'white', fontSize: '1.2rem' }}>🖨️</button>
+                <button onClick={() => setIsPaymentStep(true)} disabled={items.length === 0} style={{ padding: '10px 15px', borderRadius: '8px', background: items.length > 0 ? '#16a34a' : '#cbd5e1', color: 'white', fontWeight: 800, border: 'none', fontSize: '0.9rem' }}>FECHAR ($)</button>
               </div>
             </div>
           </>
