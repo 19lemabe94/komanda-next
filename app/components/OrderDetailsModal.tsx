@@ -139,7 +139,8 @@ export function OrderDetailsModal({ orderId, label, onClose, onUpdate, userRole 
     <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.8)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '10px', backdropFilter: 'blur(3px)' }}>
       <div style={{ 
           backgroundColor: '#fff', width: '100%', maxWidth: '600px', 
-          height: '95vh', 
+          maxHeight: '85vh', // CORREÇÃO: Altura máxima segura para mobile
+          height: 'auto',    // CORREÇÃO: Altura se adapta ao conteúdo
           borderRadius: '16px', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 10px 25px rgba(0,0,0,0.2)'
       }}>
         
@@ -167,8 +168,7 @@ export function OrderDetailsModal({ orderId, label, onClose, onUpdate, userRole 
           </div>
         ) : (
           <>
-            {/* --- LISTA DE ITENS JÁ PEDIDOS (Topo - Otimizado) --- */}
-            {/* AGORA ELA SÓ CRESCE SE TIVER ITENS (maxHeight 30%) */}
+            {/* --- LISTA DE ITENS JÁ PEDIDOS --- */}
             <div style={{ flex: '0 0 auto', maxHeight: '30%', overflowY: 'auto', backgroundColor: '#f8fafc', borderBottom: `1px solid ${colors.border}` }}>
               {items.length === 0 ? (
                  <div style={{ padding: '10px', textAlign: 'center', color: '#94a3b8', fontSize: '0.8rem' }}>Nenhum item lançado ainda.</div>
@@ -214,7 +214,7 @@ export function OrderDetailsModal({ orderId, label, onClose, onUpdate, userRole 
                   </div>
                 </div>
 
-                {/* 2. Lista de Produtos (LIST VIEW - OTIMIZADO) */}
+                {/* 2. Lista de Produtos (LIST VIEW) */}
                 <div style={{ flex: 1, overflowY: 'auto', padding: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   {filteredProducts.map(p => {
                     const isSelected = selectedProductId === p.id
