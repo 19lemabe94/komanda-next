@@ -16,26 +16,23 @@ type ClosedOrder = {
   created_at: string
 }
 
-// Tipo para os totais do dia
 type DailyTotals = {
   geral: number
   dinheiro: number
-  digital: number // Pix + Cartões
+  digital: number
   fiado: number
 }
 
 export default function VendasPage() {
   const router = useRouter()
-  // Data inicial: Hoje (Formato ISO para input date)
   const today = new Date().toLocaleDateString('sv-SE')
   
   const [orders, setOrders] = useState<ClosedOrder[]>([])
   const [loading, setLoading] = useState(true)
   const [dateFilter, setDateFilter] = useState(today)
   const [selectedOrder, setSelectedOrder] = useState<{id: string, label: string} | null>(null)
-  const [userRole, setUserRole] = useState<string | null>(null) // Para o Header e Permissões
+  const [userRole, setUserRole] = useState<string | null>(null) 
   
-  // Estado para os totais calculados
   const [totals, setTotals] = useState<DailyTotals>({ geral: 0, dinheiro: 0, digital: 0, fiado: 0 })
 
   useEffect(() => {
@@ -47,7 +44,6 @@ export default function VendasPage() {
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) { router.push('/login'); return }
 
-    // Busca org_id E role para o menu funcionar corretamente
     const { data: profile } = await supabase
       .from('profiles')
       .select('org_id, role')
@@ -55,9 +51,8 @@ export default function VendasPage() {
       .single()
 
     if (profile?.org_id) {
-      setUserRole(profile.role) // Define o papel do usuário
+      setUserRole(profile.role)
 
-      // Ajuste de fuso horário simples para garantir o dia inteiro UTC
       const startOfDay = `${dateFilter}T00:00:00.000Z`
       const endOfDay = `${dateFilter}T23:59:59.999Z`
 
@@ -65,7 +60,7 @@ export default function VendasPage() {
         .from('orders')
         .select('*')
         .eq('org_id', profile.org_id)
-        .neq('status', 'aberta') // Trazemos concluídas e canceladas
+        .neq('status', 'aberta')
         .gte('created_at', startOfDay)
         .lte('created_at', endOfDay)
         .order('created_at', { ascending: false })
@@ -83,7 +78,6 @@ export default function VendasPage() {
 
   const calculateTotals = (data: ClosedOrder[]) => {
     const newTotals = data.reduce((acc, curr) => {
-      // Ignora canceladas nos totais
       if (curr.status !== 'concluida') return acc
 
       const val = curr.total
@@ -94,7 +88,6 @@ export default function VendasPage() {
       } else if (curr.payment_method === 'fiado') {
         acc.fiado += val
       } else {
-        // Pix, Debito, Credito
         acc.digital += val
       }
       return acc
@@ -128,12 +121,10 @@ export default function VendasPage() {
   return (
     <div style={{ ...globalStyles.container, justifyContent: 'flex-start', background: '#f8fafc' }}>
       
-      {/* HEADER CENTRALIZADO E RESPONSIVO */}
       <Header userRole={userRole} subtitle="HISTÓRICO DE VENDAS" />
 
       <main style={{ width: '100%', maxWidth: '900px', padding: '30px 20px', flex: 1 }}>
         
-        {/* BARRA DE FILTRO DE DATA */}
         <div style={{ marginBottom: '25px', display: 'flex', alignItems: 'center', gap: '15px', background: 'white', padding: '15px 20px', borderRadius: '12px', border: `1px solid ${colors.border}`, boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
           <span style={{ fontSize: '1.2rem' }}>📅</span>
           <div style={{ flex: 1 }}>
@@ -147,34 +138,28 @@ export default function VendasPage() {
           </div>
         </div>
 
-        {/* CARDS DE RESUMO DO DIA (Modais de totais) */}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '15px', marginBottom: '30px' }}>
-          {/* Total Geral */}
           <div style={{ ...kpiCardStyle, backgroundColor: colors.primary, color: 'white', border: 'none' }}>
             <span style={{ fontSize: '0.75rem', fontWeight: 700, opacity: 0.9 }}>TOTAL DO DIA</span>
             <div style={{ fontSize: '1.8rem', fontWeight: 900, marginTop: '5px' }}>R$ {totals.geral.toFixed(2)}</div>
           </div>
 
-          {/* Dinheiro */}
           <div style={kpiCardStyle}>
             <span style={{ fontSize: '0.75rem', fontWeight: 700, color: colors.textMuted }}>💵 DINHEIRO</span>
             <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#16a34a', marginTop: '5px' }}>R$ {totals.dinheiro.toFixed(2)}</div>
           </div>
 
-          {/* Digital (Pix/Cartão) */}
           <div style={kpiCardStyle}>
             <span style={{ fontSize: '0.75rem', fontWeight: 700, color: colors.textMuted }}>💳 PIX / CARTÃO</span>
             <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#2563eb', marginTop: '5px' }}>R$ {totals.digital.toFixed(2)}</div>
           </div>
 
-           {/* Fiado */}
            <div style={kpiCardStyle}>
             <span style={{ fontSize: '0.75rem', fontWeight: 700, color: colors.textMuted }}>📝 FIADO</span>
             <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#f97316', marginTop: '5px' }}>R$ {totals.fiado.toFixed(2)}</div>
           </div>
         </div>
 
-        {/* LISTA DE VENDAS */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           {loading ? (
             <div style={{ textAlign: 'center', padding: '40px', color: colors.textMuted }}>Carregando vendas...</div>
@@ -215,7 +200,6 @@ export default function VendasPage() {
                     R$ {order.total.toFixed(2)}
                   </div>
                   
-                  {/* SÓ MOSTRA O BOTÃO SE FOR ADMIN */}
                   {userRole === 'admin' && (
                     <button 
                       onClick={(e) => handleDelete(e, order.id, order.label)}
@@ -237,13 +221,14 @@ export default function VendasPage() {
         </div>
       </main>
 
-      {/* MODAL DE DETALHES */}
+      {/* MODAL DE DETALHES (Agora com prop userRole) */}
       {selectedOrder && (
         <OrderDetailsModal 
           orderId={selectedOrder.id}
           label={selectedOrder.label}
           onClose={() => setSelectedOrder(null)}
-          onUpdate={initFetch} // Recarrega a lista se algo mudar
+          onUpdate={initFetch}
+          userRole={userRole} 
         />
       )}
     </div>

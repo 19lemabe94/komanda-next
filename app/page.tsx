@@ -11,7 +11,7 @@ type Order = {
   id: string; label: string; status: 'aberta' | 'pagamento' | 'concluida' | 'cancelada'; total: number; org_id: string;
 }
 
-// --- LISTA DE 150 VERSÍCULOS ---
+// --- LISTA DE VERSÍCULOS ---
 const VERSICULOS = [
   { text: "O Senhor é o meu pastor; de nada terei falta.", ref: "Salmos 23:1" },
   { text: "Tudo posso naquele que me fortalece.", ref: "Filipenses 4:13" },
@@ -276,8 +276,8 @@ export default function Dashboard() {
 
            {/* VERSÍCULO DESTAQUE (Discreto) */}
            <div style={{ 
-             backgroundColor: '#f8fafc',  // Cinza muito claro
-             color: '#475569',            // Cinza chumbo (legível e discreto)
+             backgroundColor: '#f8fafc',  
+             color: '#475569',            
              padding: '12px 20px', 
              borderRadius: '12px', 
              border: `1px solid ${colors.border}`, 
@@ -331,7 +331,15 @@ export default function Dashboard() {
       </main>
 
       {/* Modais */}
-      {selectedOrder && <OrderDetailsModal orderId={selectedOrder.id} label={selectedOrder.label} onClose={() => setSelectedOrder(null)} onUpdate={() => fetchOrders(myOrgId!)} />}
+      {selectedOrder && (
+        <OrderDetailsModal 
+          orderId={selectedOrder.id} 
+          label={selectedOrder.label} 
+          onClose={() => setSelectedOrder(null)} 
+          onUpdate={() => fetchOrders(myOrgId!)} 
+          userRole={userRole} 
+        />
+      )}
       
       {isCreateModalOpen && (
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.6)', zIndex: 110, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(2px)' }}>
