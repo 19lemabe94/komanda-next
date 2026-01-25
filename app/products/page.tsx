@@ -12,17 +12,20 @@ type Product = {
   description: string
   price: number
   category: string
+  org_id: string
 }
 
 type Category = {
   id: string
   name: string
   color: string
+  org_id: string
 }
 
 export default function ProductsPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(true)
+  const [myOrgId, setMyOrgId] = useState<string | null>(null)
   
   // Listas de Dados
   const [products, setProducts] = useState<Product[]>([])
@@ -46,28 +49,51 @@ export default function ProductsPage() {
   const [catName, setCatName] = useState('')
 
   useEffect(() => {
-    fetchData()
+    initPage()
   }, [])
 
-  const fetchData = async () => {
-    // 1. Busca Categorias
+  const initPage = async () => {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) {
+      router.push('/login')
+      return
+    }
+
+    // Busca o org_id do perfil logado
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('org_id')
+      .eq('id', session.user.id)
+      .single()
+
+    if (profile?.org_id) {
+      setMyOrgId(profile.org_id)
+      fetchData(profile.org_id)
+    } else {
+      router.push('/setup')
+    }
+  }
+
+  const fetchData = async (orgId: string) => {
+    // 1. Busca Categorias da Organização
     const { data: catData } = await supabase
       .from('categories')
       .select('*')
+      .eq('org_id', orgId)
       .order('name', { ascending: true })
     
     if (catData) {
       setCategories(catData)
-      // Define a categoria padrão como a primeira da lista (se existir)
       if (catData.length > 0 && !prodForm.category) {
         setProdForm(prev => ({ ...prev, category: catData[0].name }))
       }
     }
 
-    // 2. Busca Produtos
+    // 2. Busca Produtos da Organização
     const { data: prodData } = await supabase
       .from('products')
       .select('*')
+      .eq('org_id', orgId)
       .order('name', { ascending: true })
     
     if (prodData) setProducts(prodData || [])
@@ -78,6 +104,8 @@ export default function ProductsPage() {
   // --- AÇÕES DE PRODUTO ---
   const handleCreateProduct = async (e: FormEvent) => {
     e.preventDefault()
+    if (!myOrgId) return
+    
     setSubmitting(true)
     const priceNumber = parseFloat(prodForm.price.replace(',', '.'))
 
@@ -91,13 +119,14 @@ export default function ProductsPage() {
       name: prodForm.name,
       description: prodForm.description,
       price: priceNumber,
-      category: prodForm.category
+      category: prodForm.category,
+      org_id: myOrgId // Vínculo com a Organização
     }])
 
     if (!error) {
       setShowProductModal(false)
       setProdForm({ ...prodForm, name: '', description: '', price: '' })
-      fetchData()
+      fetchData(myOrgId)
     } else {
       alert(error.message)
     }
@@ -113,59 +142,75 @@ export default function ProductsPage() {
   // --- AÇÕES DE CATEGORIA ---
   const handleCreateCategory = async (e: FormEvent) => {
     e.preventDefault()
-    if (!catName.trim()) return
+    if (!catName.trim() || !myOrgId) return
 
-    // Gera uma cor aleatória pastel para a nova categoria
     const randomColor = "hsl(" + 360 * Math.random() + ',' + (25 + 70 * Math.random()) + '%,' + (40 + 10 * Math.random()) + '%)'
 
     const { error } = await supabase.from('categories').insert([{
       name: catName.trim(),
-      color: randomColor
+      color: randomColor,
+      org_id: myOrgId // Vínculo com a Organização
     }])
 
     if (!error) {
       setCatName('')
-      fetchData() // Recarrega para aparecer no select
+      fetchData(myOrgId)
     }
   }
 
   const handleDeleteCategory = async (id: string) => {
     if (!confirm('Excluir esta categoria? Produtos que usam ela não serão apagados, mas ficarão sem categoria visual.')) return
     await supabase.from('categories').delete().eq('id', id)
-    fetchData()
+    if (myOrgId) fetchData(myOrgId)
   }
 
-  // Helper para pegar cor da categoria atual
   const getCategoryColor = (catName: string) => {
     const found = categories.find(c => c.name === catName)
-    return found ? found.color : '#94a3b8' // Cinza padrão se não achar
+    return found ? found.color : '#94a3b8'
+  }
+
+  const navBtnStyle = {
+    background: 'white', border: `1px solid ${colors.border}`, borderRadius: '6px',
+    padding: '8px 16px', color: colors.text, fontSize: '0.85rem', fontWeight: 600,
+    cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px'
   }
 
   return (
     <div style={{ ...globalStyles.container, justifyContent: 'flex-start', background: '#f8fafc' }}>
       
-      {/* HEADER */}
+      {/* HEADER PADRONIZADO */}
       <header style={{
-        width: '100%', background: 'white', borderBottom: `1px solid ${colors.border}`,
-        padding: '0 20px', height: '70px', display: 'flex', alignItems: 'center', justifyContent: 'space-between'
+        width: '100%', backgroundColor: 'white', borderBottom: `1px solid ${colors.border}`,
+        padding: '0 20px', height: '70px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        boxShadow: '0 2px 4px rgba(0,0,0,0.02)'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-          <BrandLogo size={30} color={colors.primary} />
-          <h1 style={{ fontSize: '1.2rem', color: colors.primary, margin: 0 }}>Cardápio</h1>
+          <BrandLogo size={36} color={colors.primary} />
+          <div style={{ lineHeight: 1 }}>
+            <span style={{ fontWeight: 800, color: colors.primary, display: 'block' }}>KOMANDA</span>
+            <span style={{ fontSize: '0.65rem', color: colors.textMuted, textTransform: 'uppercase' }}>Menu</span>
+          </div>
         </div>
-        <button onClick={() => router.push('/')} style={{ background: 'none', border: 'none', color: colors.textMuted, cursor: 'pointer', fontWeight: 'bold' }}>
-          Voltar
-        </button>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <button onClick={() => { router.push('/'); router.refresh(); }} style={navBtnStyle}>🏠 Comandas</button>
+          <button onClick={() => { router.push('/reports'); router.refresh(); }} style={navBtnStyle}>📈 Relatórios</button>
+          <button onClick={() => { router.push('/squad'); router.refresh(); }} style={navBtnStyle}>👥 Squad</button>
+          <button 
+            onClick={async () => { await supabase.auth.signOut(); router.push('/login') }}
+            style={{ ...navBtnStyle, backgroundColor: colors.errorBg, color: colors.errorText, border: 'none' }}
+          >
+            Sair
+          </button>
+        </div>
       </header>
 
       <main style={{ width: '100%', maxWidth: '800px', padding: '30px 20px', flex: 1 }}>
         
-        {/* BARRA DE AÇÕES */}
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px', alignItems: 'center' }}>
-          <span style={{ color: colors.textMuted }}>{products.length} itens cadastrados</span>
+          <span style={{ color: colors.textMuted, fontWeight: 600 }}>{products.length} itens cadastrados</span>
           
           <div style={{ display: 'flex', gap: '10px' }}>
-            {/* Botão Gerenciar Categorias */}
             <button 
               onClick={() => setShowCategoryModal(true)}
               style={{ 
@@ -176,7 +221,6 @@ export default function ProductsPage() {
               🏷️ Categorias
             </button>
 
-            {/* Botão Novo Produto */}
             <button 
               onClick={() => setShowProductModal(true)}
               style={{ 
@@ -189,7 +233,6 @@ export default function ProductsPage() {
           </div>
         </div>
 
-        {/* LISTA DE PRODUTOS */}
         {loading ? <p>Carregando...</p> : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             {products.map(item => (
@@ -276,7 +319,7 @@ export default function ProductsPage() {
         </div>
       )}
 
-      {/* MODAL 2: GERENCIAR CATEGORIAS */}
+      {/* MODAL 2: CATEGORIAS */}
       {showCategoryModal && (
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 60, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div style={{ ...globalStyles.card, width: '90%', maxWidth: '350px', padding: '30px' }}>
@@ -285,7 +328,6 @@ export default function ProductsPage() {
               <button onClick={() => setShowCategoryModal(false)} style={{ background: 'none', border: 'none', fontSize: '1.2rem', cursor: 'pointer' }}>✕</button>
             </div>
             
-            {/* Lista de Existentes */}
             <div style={{ maxHeight: '200px', overflowY: 'auto', marginBottom: '20px', border: `1px solid ${colors.border}`, borderRadius: '8px' }}>
               {categories.map(cat => (
                 <div key={cat.id} style={{ padding: '10px', borderBottom: `1px solid ${colors.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'white' }}>
@@ -299,14 +341,8 @@ export default function ProductsPage() {
               {categories.length === 0 && <p style={{ padding: '10px', textAlign: 'center', color: colors.textMuted, fontSize: '0.8rem' }}>Nenhuma categoria.</p>}
             </div>
 
-            {/* Criar Nova */}
             <form onSubmit={handleCreateCategory} style={{ display: 'flex', gap: '8px' }}>
-              <input 
-                value={catName} 
-                onChange={e => setCatName(e.target.value)} 
-                placeholder="Nova Categoria..." 
-                style={{ ...globalStyles.input, marginBottom: 0, padding: '10px' }} 
-              />
+              <input value={catName} onChange={e => setCatName(e.target.value)} placeholder="Nova Categoria..." style={{ ...globalStyles.input, marginBottom: 0, padding: '10px' }} />
               <button type="submit" style={{ ...globalStyles.buttonPrimary, width: 'auto', marginTop: 0, padding: '0 15px' }}>+</button>
             </form>
           </div>
