@@ -3,7 +3,6 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { useRouter } from 'next/navigation'
 import { colors, globalStyles } from '../styles/theme'
-// Importamos o Header centralizado
 import { Header } from '../components/Header'
 import { 
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, 
@@ -25,15 +24,19 @@ type TopCategory = { category: string; total: number }
 export default function ReportsPage() {
   const router = useRouter()
   
-  // Data de hoje no formato YYYY-MM-DD
-  const getToday = () => new Date().toLocaleDateString('sv-SE')
+  // --- FUNÇÃO DE DATA SEGURA (Igual à Vendas) ---
+  const getLocalToday = () => {
+    const now = new Date()
+    const offset = now.getTimezoneOffset() * 60000
+    const localDate = new Date(now.getTime() - offset)
+    return localDate.toISOString().split('T')[0]
+  }
   
-  const [startDate, setStartDate] = useState(getToday())
-  const [endDate, setEndDate] = useState(getToday())
+  const [startDate, setStartDate] = useState(getLocalToday())
+  const [endDate, setEndDate] = useState(getLocalToday())
   const [loading, setLoading] = useState(true)
-  const [activeFilter, setActiveFilter] = useState('hoje') // Para marcar o botão ativo
-  const [myOrgId, setMyOrgId] = useState<string | null>(null)
-  const [userRole, setUserRole] = useState<string | null>(null) // Para o Header
+  const [activeFilter, setActiveFilter] = useState('hoje')
+  const [userRole, setUserRole] = useState<string | null>(null)
 
   const [stats, setStats] = useState<FinancialStats>({ total: 0, dinheiro: 0, fiado: 0, digital: 0, ticket_medio: 0 })
   const [topProducts, setTopProducts] = useState<TopProduct[]>([])
@@ -47,14 +50,17 @@ export default function ReportsPage() {
 
   // Lógica dos Filtros Rápidos
   const handlePreset = (period: string) => {
+    const now = new Date()
+    const offset = now.getTimezoneOffset() * 60000
+    const formatDate = (d: Date) => new Date(d.getTime() - offset).toISOString().split('T')[0]
+
     const end = new Date()
     const start = new Date()
+
     setActiveFilter(period)
 
     switch (period) {
-      case 'hoje':
-        // Start e End são hoje
-        break;
+      case 'hoje': break; // Start e End são hoje
       case 'ontem':
         start.setDate(start.getDate() - 1)
         end.setDate(end.getDate() - 1)
@@ -63,7 +69,7 @@ export default function ReportsPage() {
         start.setDate(start.getDate() - 7)
         break;
       case 'mes':
-        start.setMonth(start.getMonth() - 1)
+        start.setDate(1) // 1º dia do mês
         break;
       case '6meses':
         start.setMonth(start.getMonth() - 6)
@@ -71,12 +77,10 @@ export default function ReportsPage() {
       case 'ano':
         start.setFullYear(start.getFullYear() - 1)
         break;
-      default:
-        break;
     }
 
-    setStartDate(start.toLocaleDateString('sv-SE'))
-    setEndDate(end.toLocaleDateString('sv-SE'))
+    setStartDate(formatDate(start))
+    setEndDate(formatDate(end))
   }
 
   const checkAdminAndFetch = async () => {
@@ -96,65 +100,122 @@ export default function ReportsPage() {
       return
     }
 
-    if (!profile.org_id) {
-      router.push('/setup')
-      return
-    }
+    setUserRole(profile.role)
 
-    setMyOrgId(profile.org_id)
-    setUserRole(profile.role) // Define o papel para o Header
-
-    // Cores das categorias
+    // Busca cores das categorias
     const { data: catSettings } = await supabase
       .from('categories')
       .select('name, color')
       .eq('org_id', profile.org_id)
     
+    const colorMap: Record<string, string> = {}
     if (catSettings) {
-      const colorMap = catSettings.reduce((acc, cat) => ({ ...acc, [cat.name]: cat.color }), {})
+      catSettings.forEach(cat => colorMap[cat.name] = cat.color)
       setCategoryColors(colorMap)
     }
 
-    // Busca de Dados (RPCs)
-    const [financeRes, prodsRes, catsRes] = await Promise.all([
-      supabase.rpc('get_period_stats', { start_date: startDate, end_date: endDate, p_org_id: profile.org_id }),
-      supabase.rpc('get_top_products', { start_date: startDate, end_date: endDate, p_org_id: profile.org_id }),
-      supabase.rpc('get_top_categories', { start_date: startDate, end_date: endDate, p_org_id: profile.org_id })
-    ])
+    // --- BUSCA INTELIGENTE COM FUSO HORÁRIO ---
+    // Usamos o intervalo ISO completo para garantir que pegamos vendas da noite
+    const startIso = `${startDate}T00:00:00`
+    const endIso = `${endDate}T23:59:59`
+    
+    // 1. Busca Vendas (Orders) + Itens + Produto(Categoria)
+    const { data: orders, error } = await supabase
+      .from('orders')
+      .select(`
+        id, status, total, payment_method, created_at,
+        order_items (
+          quantity,
+          product_price_snapshot,
+          product_name_snapshot,
+          products ( category ) 
+        )
+      `)
+      .eq('org_id', profile.org_id)
+      .neq('status', 'aberta') // Apenas fechadas ou canceladas
+      .gte('created_at', new Date(startIso).toISOString())
+      .lte('created_at', new Date(endIso).toISOString())
 
-    if (financeRes.data) {
-      const f = financeRes.data as FinancialStats
-      setStats(f)
-      setPaymentDistribution([
-        { name: 'Dinheiro', value: f.dinheiro, color: '#22c55e' }, // Verde
-        { name: 'Digital', value: f.digital, color: '#3b82f6' },  // Azul
-        { name: 'Fiado', value: f.fiado, color: '#f97316' }       // Laranja
-      ].filter(d => d.value > 0))
+    if (!error && orders) {
+      processData(orders, colorMap)
     }
-
-    if (prodsRes.data) setTopProducts(prodsRes.data as TopProduct[])
-    if (catsRes.data) setTopCategories(catsRes.data as TopCategory[])
 
     setLoading(false)
   }
 
-  // Componente de Tooltip Personalizado para os Gráficos
+  // --- PROCESSAMENTO LOCAL DOS DADOS ---
+  const processData = (orders: any[], colorMap: Record<string, string>) => {
+    const newStats = { total: 0, dinheiro: 0, fiado: 0, digital: 0, ticket_medio: 0 }
+    const productCount: Record<string, number> = {}
+    const categoryCount: Record<string, number> = {}
+    let validOrdersCount = 0
+
+    orders.forEach(order => {
+      if (order.status !== 'concluida') return
+
+      validOrdersCount++
+      const val = order.total
+      newStats.total += val
+
+      // Financeiro
+      if (order.payment_method === 'dinheiro') newStats.dinheiro += val
+      else if (order.payment_method === 'fiado') newStats.fiado += val
+      else newStats.digital += val
+
+      // Produtos e Categorias
+      order.order_items.forEach((item: any) => {
+        // Top Produtos
+        const pName = item.product_name_snapshot
+        productCount[pName] = (productCount[pName] || 0) + item.quantity
+
+        // Top Categorias (Tenta pegar do cadastro atual, senão 'Outros')
+        // item.products pode ser null se o produto foi deletado, então tratamos isso
+        const catName = item.products?.category || 'Outros'
+        categoryCount[catName] = (categoryCount[catName] || 0) + (item.product_price_snapshot * item.quantity)
+      })
+    })
+
+    // Ticket Médio
+    newStats.ticket_medio = validOrdersCount > 0 ? newStats.total / validOrdersCount : 0
+
+    // Formata Top Produtos (Top 5)
+    const sortedProducts = Object.entries(productCount)
+      .map(([name, quantity]) => ({ name, quantity }))
+      .sort((a, b) => b.quantity - a.quantity)
+      .slice(0, 5)
+
+    // Formata Top Categorias
+    const sortedCategories = Object.entries(categoryCount)
+      .map(([category, total]) => ({ category, total }))
+      .sort((a, b) => b.total - a.total)
+
+    // Atualiza Estados
+    setStats(newStats)
+    setTopProducts(sortedProducts)
+    setTopCategories(sortedCategories)
+    
+    setPaymentDistribution([
+      { name: 'Dinheiro', value: newStats.dinheiro, color: '#22c55e' },
+      { name: 'Digital', value: newStats.digital, color: '#3b82f6' },
+      { name: 'Fiado', value: newStats.fiado, color: '#f97316' }
+    ].filter(d => d.value > 0))
+  }
+
+  // Componente de Tooltip
   const CustomTooltip = ({ active, payload, totalValue, isCurrency = true }: any) => {
     if (active && payload && payload.length) {
       const data = payload[0]
       const percent = totalValue > 0 ? ((data.value / totalValue) * 100).toFixed(1) : 0
       return (
-        <div style={{ backgroundColor: 'white', padding: '15px', border: 'none', borderRadius: '12px', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)' }}>
+        <div style={{ backgroundColor: 'white', padding: '15px', borderRadius: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
           <p style={{ margin: '0 0 5px', fontWeight: 700, color: data.payload.fill || colors.primary, fontSize: '0.9rem', textTransform: 'uppercase' }}>
             {data.name || data.payload.category || data.payload.name}
           </p>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '15px', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', gap: '15px', justifyContent: 'space-between' }}>
             <span style={{ fontSize: '1rem', color: '#1e293b', fontWeight: 600 }}>
               {isCurrency ? `R$ ${Number(data.value).toFixed(2)}` : `${data.value} un.`}
             </span>
-            <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#64748b', backgroundColor: '#f1f5f9', padding: '4px 8px', borderRadius: '6px' }}>
-              {percent}%
-            </span>
+            <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#64748b', background: '#f1f5f9', padding: '4px 8px', borderRadius: '6px' }}>{percent}%</span>
           </div>
         </div>
       )
@@ -162,7 +223,6 @@ export default function ReportsPage() {
     return null
   }
 
-  // Estilos Padronizados
   const filterBtnStyle = (isActive: boolean) => ({
     padding: '8px 16px', borderRadius: '8px', 
     border: isActive ? `1px solid ${colors.primary}` : '1px solid #e2e8f0', 
@@ -186,7 +246,6 @@ export default function ReportsPage() {
   return (
     <div style={{ ...globalStyles.container, justifyContent: 'flex-start', background: '#f8fafc' }}>
       
-      {/* HEADER CENTRALIZADO E RESPONSIVO */}
       <Header userRole={userRole} subtitle="DASHBOARD / INTELIGÊNCIA" />
 
       <main style={{ width: '100%', maxWidth: '1200px', padding: '30px 20px', flex: 1 }}>
@@ -204,23 +263,19 @@ export default function ReportsPage() {
               <button onClick={() => handlePreset('ontem')} style={filterBtnStyle(activeFilter === 'ontem')}>Ontem</button>
               <button onClick={() => handlePreset('7dias')} style={filterBtnStyle(activeFilter === '7dias')}>7 Dias</button>
               <button onClick={() => handlePreset('mes')} style={filterBtnStyle(activeFilter === 'mes')}>Mês Atual</button>
-              <button onClick={() => handlePreset('6meses')} style={filterBtnStyle(activeFilter === '6meses')}>6 Meses</button>
-              <button onClick={() => handlePreset('ano')} style={filterBtnStyle(activeFilter === 'ano')}>1 Ano</button>
             </div>
           </div>
 
           <div style={{ display: 'flex', gap: '10px', alignItems: 'center', backgroundColor: '#f8fafc', padding: '10px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
             <span style={{ fontSize: '1.2rem' }}>📅</span>
             <input 
-              type="date" 
-              value={startDate} 
+              type="date" value={startDate} 
               onChange={e => { setStartDate(e.target.value); setActiveFilter('custom'); }} 
               style={{ background: 'transparent', border: 'none', fontWeight: 'bold', color: colors.text, outline: 'none', fontFamily: 'inherit' }} 
             />
             <span style={{ color: colors.textMuted, fontSize: '0.8rem' }}>até</span>
             <input 
-              type="date" 
-              value={endDate} 
+              type="date" value={endDate} 
               onChange={e => { setEndDate(e.target.value); setActiveFilter('custom'); }} 
               style={{ background: 'transparent', border: 'none', fontWeight: 'bold', color: colors.text, outline: 'none', fontFamily: 'inherit' }} 
             />
@@ -229,7 +284,6 @@ export default function ReportsPage() {
 
         {/* CARDS DE KPI */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px', marginBottom: '30px' }}>
-          {/* Card Principal - Total */}
           <div style={{ ...kpiCardStyle, backgroundColor: colors.primary, color: 'white', border: 'none' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
               <span style={{ opacity: 0.8, fontSize: '0.75rem', fontWeight: 700, letterSpacing: '1px' }}>FATURAMENTO TOTAL</span>
@@ -265,9 +319,8 @@ export default function ReportsPage() {
         {/* ÁREA DE GRÁFICOS */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '20px' }}>
           
-          {/* Top Produtos */}
           <div style={{ backgroundColor: 'white', padding: '25px', borderRadius: '16px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)' }}>
-            <h3 style={{ margin: '0 0 20px', fontSize: '1rem', color: colors.text, fontWeight: 800, textTransform: 'uppercase' }}>🏆 Top 5 Produtos Mais Vendidos</h3>
+            <h3 style={{ margin: '0 0 20px', fontSize: '1rem', color: colors.text, fontWeight: 800, textTransform: 'uppercase' }}>🏆 Top 5 Produtos</h3>
             <div style={{ height: '300px' }}>
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart layout="vertical" data={topProducts} margin={{ left: 0, right: 30, top: 0, bottom: 0 }}>
@@ -280,9 +333,8 @@ export default function ReportsPage() {
             </div>
           </div>
 
-          {/* Vendas por Categoria */}
           <div style={{ backgroundColor: 'white', padding: '25px', borderRadius: '16px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)' }}>
-            <h3 style={{ margin: '0 0 20px', fontSize: '1rem', color: colors.text, fontWeight: 800, textTransform: 'uppercase' }}>🍕 Mix de Categorias</h3>
+            <h3 style={{ margin: '0 0 20px', fontSize: '1rem', color: colors.text, fontWeight: 800, textTransform: 'uppercase' }}>🍕 Categorias</h3>
             <div style={{ height: '300px' }}>
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
@@ -298,9 +350,8 @@ export default function ReportsPage() {
             </div>
           </div>
 
-          {/* Meios de Pagamento */}
           <div style={{ backgroundColor: 'white', padding: '25px', borderRadius: '16px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)' }}>
-            <h3 style={{ margin: '0 0 20px', fontSize: '1rem', color: colors.text, fontWeight: 800, textTransform: 'uppercase' }}>💳 Distribuição de Pagamentos</h3>
+            <h3 style={{ margin: '0 0 20px', fontSize: '1rem', color: colors.text, fontWeight: 800, textTransform: 'uppercase' }}>💳 Pagamentos</h3>
             <div style={{ height: '300px' }}>
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>

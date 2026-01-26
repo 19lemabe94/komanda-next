@@ -245,7 +245,7 @@ export default function ProductsPage() {
                   fontSize: '0.85rem',
                   backgroundColor: selectedCategory === cat.name ? cat.color : 'white',
                   color: selectedCategory === cat.name ? 'white' : colors.text,
-                  // AQUI ESTAVA O ERRO: Deixe apenas ESTA definição de border
+                  // APENAS UMA DEFINIÇÃO DE BORDER
                   border: selectedCategory === cat.name ? 'none' : `1px solid ${colors.border}`,
                   boxShadow: selectedCategory === cat.name ? `0 4px 10px ${cat.color}60` : 'none',
                   transition: 'all 0.2s'
