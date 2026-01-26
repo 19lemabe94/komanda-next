@@ -17,6 +17,9 @@ const IconPrint = () => (
     <rect x="6" y="14" width="12" height="8"></rect>
   </svg>
 )
+const IconTrash = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+)
 
 // --- TIPOS ---
 type Product = { id: string, name: string, price: number, category: string, org_id: string, active: boolean, description?: string }
@@ -135,24 +138,14 @@ export function OrderDetailsModal({ orderId, label, onClose, onUpdate, userRole 
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         .no-scrollbar::-webkit-scrollbar { display: none; }
         input:focus { outline: 2px solid ${colors.primary}; }
-        
-        /* BOTÃO GRENÁ INTERATIVO */
-        .btn-grena-interactive {
-          background-color: white;
-          color: ${grenaColor};
-          border: 1px solid ${grenaColor};
-          transition: all 0.1s ease-in-out;
-        }
-        .btn-grena-interactive:active {
-          background-color: ${grenaColor};
-          color: white;
-          transform: scale(0.95);
-        }
+        .btn-grena-interactive { background-color: white; color: ${grenaColor}; border: 1px solid ${grenaColor}; transition: all 0.1s ease-in-out; }
+        .btn-grena-interactive:active { background-color: ${grenaColor}; color: white; transform: scale(0.95); }
       `}</style>
 
       <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.8)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '10px', backdropFilter: 'blur(3px)' }}>
-        <div style={{ backgroundColor: '#fff', width: '100%', maxWidth: '600px', height: '95vh', maxHeight: '100%', borderRadius: '16px', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 10px 25px rgba(0,0,0,0.2)' }}>
+        <div style={{ backgroundColor: '#fff', width: '100%', maxWidth: '600px', height: '100%', maxHeight: '95vh', borderRadius: '16px', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 10px 25px rgba(0,0,0,0.2)' }}>
           
+          {/* HEADER FIXO */}
           <div style={{ padding: '15px 20px', borderBottom: `1px solid ${colors.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'white', flexShrink: 0 }}>
             <div><h2 style={{ margin: 0, fontSize: '1.4rem', color: colors.primary, fontWeight: 900, textTransform: 'capitalize' }}>{label}</h2><span style={{ fontSize: '0.9rem', color: colors.textMuted }}>{items.length} itens lançados</span></div>
             <button onClick={onClose} style={{ border: 'none', background: '#f1f5f9', width: '42px', height: '42px', borderRadius: '50%', fontSize: '1.2rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
@@ -183,27 +176,31 @@ export function OrderDetailsModal({ orderId, label, onClose, onUpdate, userRole 
             </div>
           ) : (
             <>
-              <div className="no-scrollbar" style={{ flex: 1, overflowY: 'auto', backgroundColor: '#f8fafc', borderBottom: `1px solid ${colors.border}` }}>
+              {/* LISTA DE ITENS JÁ LANÇADOS (Topo - Tamanho reduzido em mobile) */}
+              <div className="no-scrollbar" style={{ flexShrink: 0, maxHeight: '25vh', overflowY: 'auto', backgroundColor: '#f8fafc', borderBottom: `1px solid ${colors.border}` }}>
                 {items.length === 0 ? (
-                  <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontSize: '1rem', padding: '20px', flexDirection: 'column', gap: '10px' }}><div style={{ fontSize: '3rem' }}>🍽️</div><div>Nenhum item lançado.<br/>Adicione itens abaixo.</div></div>
+                  <div style={{ padding: '15px', textAlign: 'center', color: '#94a3b8', fontSize: '0.9rem' }}>Nenhum item lançado.</div>
                 ) : (
                   items.map(item => (
-                    <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px 20px', background: 'white', borderBottom: '1px solid #eee' }}>
-                      <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
-                        <span style={{ background: '#e0f2fe', color: '#0369a1', padding: '6px 12px', borderRadius: '8px', fontWeight: 800, fontSize: '1rem', minWidth: '40px', textAlign: 'center' }}>{item.quantity}x</span>
-                        <div style={{ fontWeight: 700, color: '#334155', fontSize: '1rem' }}>{item.product_name_snapshot}</div>
+                    <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 20px', background: 'white', borderBottom: '1px solid #eee' }}>
+                      <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                        <span style={{ background: '#e0f2fe', color: '#0369a1', padding: '4px 8px', borderRadius: '6px', fontWeight: 800, fontSize: '0.9rem', minWidth: '30px', textAlign: 'center' }}>{item.quantity}x</span>
+                        <div style={{ fontWeight: 700, color: '#334155', fontSize: '0.9rem' }}>{item.product_name_snapshot}</div>
                       </div>
-                      <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
-                        <span style={{ fontWeight: 800, color: '#334155', fontSize: '1rem' }}>R$ {(item.product_price_snapshot * item.quantity).toFixed(2)}</span>
-                        {userRole === 'admin' ? (<button onClick={() => handleRemoveItem(item.id)} style={{ border: 'none', background: '#fee2e2', color: '#ef4444', cursor: 'pointer', fontSize: '1.2rem', width: '40px', height: '40px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>🗑️</button>) : (<button onClick={() => alert('🔒 Apenas gerentes cancelam itens.')} style={{ border: 'none', background: 'none', cursor: 'not-allowed', fontSize: '1.2rem', opacity: 0.3 }}>🔒</button>)}
+                      <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                        <span style={{ fontWeight: 800, color: '#334155', fontSize: '0.9rem' }}>R$ {(item.product_price_snapshot * item.quantity).toFixed(2)}</span>
+                        {userRole === 'admin' && (<button onClick={() => handleRemoveItem(item.id)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#ef4444', padding: '5px' }}><IconTrash /></button>)}
                       </div>
                     </div>
                   ))
                 )}
               </div>
 
-              <div style={{ height: '48%', display: 'flex', flexDirection: 'column', backgroundColor: 'white', borderTop: `1px solid ${colors.border}` }}>
-                <div style={{ padding: '15px 15px 5px 15px', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {/* ÁREA DE PRODUTOS E BUSCA (Flex 1 - Ocupa todo o resto) */}
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: 'white', minHeight: 0 }}>
+                
+                {/* 1. BUSCA E CATEGORIAS */}
+                <div style={{ padding: '15px', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '10px' }}>
                   {isCustomMode ? (
                       <div style={{ width: '100%', padding: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fff7ed', borderRadius: '12px', color: orangeTheme, fontWeight: 'bold', border: `2px dashed ${orangeTheme}`, fontSize: '1rem' }}>Modo Item Avulso Ativado</div>
                   ) : (
@@ -214,15 +211,16 @@ export function OrderDetailsModal({ orderId, label, onClose, onUpdate, userRole 
                   )}
                   {!isCustomMode && (
                       <div ref={categoriesRef} className="no-scrollbar" style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '5px' }}>
-                        <button onClick={() => setSelectedCategory('TODAS')} style={{ padding: '10px 16px', borderRadius: '20px', border: 'none', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 700, background: selectedCategory === 'TODAS' ? colors.text : '#f1f5f9', color: selectedCategory === 'TODAS' ? 'white' : colors.textMuted, whiteSpace: 'nowrap' }}>TODAS</button>
+                        <button onClick={() => setSelectedCategory('TODAS')} style={{ padding: '8px 14px', borderRadius: '20px', border: 'none', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 700, background: selectedCategory === 'TODAS' ? colors.text : '#f1f5f9', color: selectedCategory === 'TODAS' ? 'white' : colors.textMuted, whiteSpace: 'nowrap' }}>TODAS</button>
                         {categories.map(cat => (
-                          <button key={cat.id} onClick={() => setSelectedCategory(cat.name)} style={{ padding: '10px 16px', borderRadius: '20px', border: 'none', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 700, background: selectedCategory === cat.name ? cat.color : '#f1f5f9', color: selectedCategory === cat.name ? 'white' : colors.textMuted, whiteSpace: 'nowrap' }}>{cat.name}</button>
+                          <button key={cat.id} onClick={() => setSelectedCategory(cat.name)} style={{ padding: '8px 14px', borderRadius: '20px', border: 'none', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 700, background: selectedCategory === cat.name ? cat.color : '#f1f5f9', color: selectedCategory === cat.name ? 'white' : colors.textMuted, whiteSpace: 'nowrap' }}>{cat.name}</button>
                         ))}
                       </div>
                   )}
                 </div>
 
-                <div className="no-scrollbar" style={{ flex: 1, overflowY: 'auto', padding: '5px 15px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {/* 2. LISTA DE PRODUTOS SCROLLÁVEL */}
+                <div className="no-scrollbar" style={{ flex: 1, overflowY: 'auto', padding: '0 15px 15px 15px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
                   {isCustomMode ? (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', paddingTop: '10px' }}>
                           <input autoFocus placeholder="Nome do Item (Ex: Rolha, Taxa...)" value={customName} onChange={e => setCustomName(e.target.value)} style={{ width: '100%', height: '55px', padding: '0 15px', borderRadius: '12px', border: `2px solid ${colors.border}`, fontSize: '1.1rem' }} />
@@ -248,6 +246,7 @@ export function OrderDetailsModal({ orderId, label, onClose, onUpdate, userRole 
                   )}
                 </div>
 
+                {/* 3. RODAPÉ DE AÇÃO (Fixo) */}
                 <div style={{ padding: '15px', background: 'white', borderTop: `1px solid ${colors.border}`, display: 'flex', flexDirection: 'column', gap: '12px', boxShadow: '0 -4px 10px rgba(0,0,0,0.05)', flexShrink: 0 }}>
                     <div style={{ display: 'flex', gap: '12px', height: '55px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '5px', background: '#f1f5f9', borderRadius: '12px', padding: '4px', flex: 0.4 }}>
@@ -261,9 +260,7 @@ export function OrderDetailsModal({ orderId, label, onClose, onUpdate, userRole 
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '8px', borderTop: '1px dashed #eee' }}>
                       <div><span style={{ fontSize: '0.75rem', fontWeight: 800, color: colors.textMuted, textTransform: 'uppercase' }}>TOTAL MESA</span><div style={{ fontSize: '1.6rem', fontWeight: 900, color: colors.primary, lineHeight: 1 }}>R$ {localTotal.toFixed(2)}</div></div>
                       <div style={{ display: 'flex', gap: '10px' }}>
-                        {/* BOTÕES DE AÇÃO: AVULSO + PRINT */}
                         <button onClick={() => setIsCustomMode(!isCustomMode)} style={{ ...touchBtnBase, width: '55px', border: `2px solid ${isCustomMode ? orangeTheme : '#ccc'}`, background: isCustomMode ? '#fff7ed' : 'white', color: isCustomMode ? orangeTheme : colors.text }} title="Item Avulso"> {isCustomMode ? <IconClose /> : <IconPen />} </button>
-                        {/* NOVO BOTÃO PRINT GRENÁ INTERATIVO */}
                         <button onClick={handlePrint} className="btn-grena-interactive" style={{ ...touchBtnBase, width: '55px' }} title="Imprimir Comanda"><IconPrint /></button>
                         <button onClick={() => setIsPaymentStep(true)} disabled={items.length === 0} style={{ ...touchBtnBase, padding: '0 20px', background: items.length > 0 ? '#16a34a' : '#cbd5e1', color: 'white' }}>FECHAR ($)</button>
                       </div>
