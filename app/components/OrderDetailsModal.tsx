@@ -8,7 +8,6 @@ type Product = { id: string, name: string, price: number, category: string, org_
 type Category = { id: string, name: string, color: string }
 type OrderItem = { 
   id: string, 
-  product_id: string,
   product_name_snapshot: string, 
   product_price_snapshot: number, 
   quantity: number, 
@@ -34,14 +33,11 @@ export function OrderDetailsModal({ orderId, label, onClose, onUpdate, userRole 
   const [isPaymentStep, setIsPaymentStep] = useState(false)
   const [myOrgId, setMyOrgId] = useState<string | null>(null)
 
-  // Filtros, Seleção e Edição
+  // Filtros e Seleção
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('TODAS')
   const [selectedProductId, setSelectedProductId] = useState('') 
   const [quantity, setQuantity] = useState(1)
-  
-  // NOVO: Estado para controlar qual item estamos editando
-  const [editingItemId, setEditingItemId] = useState<string | null>(null)
 
   useEffect(() => { loadData() }, [orderId])
 
@@ -83,71 +79,36 @@ export function OrderDetailsModal({ orderId, label, onClose, onUpdate, userRole 
     return found ? found.color : '#94a3b8'
   }
 
-  // PREPARAR EDIÇÃO
-  const handleEditItem = (item: OrderItem) => {
-      setEditingItemId(item.id)
-      setSelectedProductId(item.product_id)
-      setQuantity(item.quantity)
-  }
-
-  // SALVAR (CRIAR OU ATUALIZAR)
-  const handleSaveItem = async () => {
-    if (userRole !== 'admin') return; 
-
+  const handleAddItem = async () => {
     if (!selectedProductId || !myOrgId) return;
+    
     const product = products.find(p => p.id === selectedProductId);
     if (!product) return;
 
-    if (editingItemId) {
-        // --- MODO ATUALIZAR ---
-        const { error } = await supabase
-            .from('order_items')
-            .update({ quantity: quantity }) // Atualiza só a quantidade
-            .eq('id', editingItemId)
+    const novoItem = {
+      order_id: orderId, product_id: product.id, quantity: quantity, org_id: myOrgId,
+      product_name_snapshot: product.name, product_price_snapshot: product.price
+    };
 
-        if (error) alert(`Erro ao atualizar: ${error.message}`)
-        else {
-            setEditingItemId(null) // Sai do modo edição
-            setSelectedProductId('')
-            setQuantity(1)
-            await loadData()
-            onUpdate()
-        }
-    } else {
-        // --- MODO CRIAR (ADICIONAR) ---
-        const novoItem = {
-            order_id: orderId, product_id: product.id, quantity: quantity, org_id: myOrgId,
-            product_name_snapshot: product.name, product_price_snapshot: product.price
-        };
-
-        const { error } = await supabase.from('order_items').insert([novoItem]);
-        if (error) alert(`Erro: ${error.message}`);
-        else {
-            setSelectedProductId(''); 
-            setQuantity(1); 
-            await loadData(); 
-            onUpdate();
-        }
+    const { error } = await supabase.from('order_items').insert([novoItem]);
+    if (error) alert(`Erro: ${error.message}`);
+    else {
+      // Feedback visual simples ou reset
+      // setSelectedProductId(''); // Opcional: manter selecionado para lançar vários rápido
+      setQuantity(1); 
+      await loadData(); 
+      onUpdate();
     }
   };
 
   const handleRemoveItem = async (itemId: string) => {
     if (userRole !== 'admin') {
-      alert('🔒 Acesso Negado: Apenas gerentes podem remover itens lançados.')
+      alert('🔒 Acesso Negado: Apenas gerentes podem remover itens lançados.\nPeça para um gerente cancelar este item.')
       return
     }
     if (!confirm('Tem certeza que deseja remover este item?')) return;
     const { error } = await supabase.from('order_items').delete().eq('id', itemId)
-    if (!error) { 
-        // Se deletou o item que estava sendo editado, limpa o form
-        if (editingItemId === itemId) {
-            setEditingItemId(null)
-            setSelectedProductId('')
-            setQuantity(1)
-        }
-        await loadData(); 
-        onUpdate(); 
-    }
+    if (!error) { await loadData(); onUpdate(); }
   }
 
   const handleFinishOrder = async (method: string) => {
@@ -176,9 +137,15 @@ export function OrderDetailsModal({ orderId, label, onClose, onUpdate, userRole 
 
   return (
     <>
+      {/* CSS Global para scroll invisível (Correção do erro de TS) */}
       <style jsx global>{`
-        .no-scrollbar::-webkit-scrollbar { display: none; }
-        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .no-scrollbar {
+          -ms-overflow-style: none;  /* IE and Edge */
+          scrollbar-width: none;  /* Firefox */
+        }
+        .no-scrollbar::-webkit-scrollbar {
+          display: none; /* Chrome, Safari and Opera */
+        }
       `}</style>
 
       <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.8)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '10px', backdropFilter: 'blur(3px)' }}>
@@ -186,7 +153,7 @@ export function OrderDetailsModal({ orderId, label, onClose, onUpdate, userRole 
             backgroundColor: '#fff', 
             width: '100%', 
             maxWidth: '600px', 
-            height: '90vh', // Altura fixa para garantir consistência
+            height: '90vh', // Altura fixa e alta
             borderRadius: '16px', 
             display: 'flex', 
             flexDirection: 'column', 
@@ -194,7 +161,7 @@ export function OrderDetailsModal({ orderId, label, onClose, onUpdate, userRole 
             boxShadow: '0 10px 25px rgba(0,0,0,0.2)'
         }}>
           
-          {/* HEADER */}
+          {/* HEADER (Fixo) */}
           <div style={{ padding: '12px 15px', borderBottom: `1px solid ${colors.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'white', flexShrink: 0 }}>
             <div>
               <h2 style={{ margin: 0, fontSize: '1.2rem', color: colors.primary, fontWeight: 900, textTransform: 'capitalize' }}>{label}</h2>
@@ -204,6 +171,7 @@ export function OrderDetailsModal({ orderId, label, onClose, onUpdate, userRole 
           </div>
 
           {isPaymentStep ? (
+            // TELA DE PAGAMENTO (Ocupa tudo)
             <div className="no-scrollbar" style={{ flex: 1, padding: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', backgroundColor: '#fafafa', overflowY: 'auto' }}>
               <div style={{ fontSize: '3rem', fontWeight: 900, color: '#166534', marginBottom: '20px' }}>R$ {localTotal.toFixed(2)}</div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', width: '100%', marginBottom: '20px' }}>
@@ -217,164 +185,134 @@ export function OrderDetailsModal({ orderId, label, onClose, onUpdate, userRole 
             </div>
           ) : (
             <>
-              {/* --- LISTA DE ITENS JÁ PEDIDOS (MÁXIMO 3 ITENS VISÍVEIS) --- */}
-              {/* Ajustei o maxHeight para 180px, o que dá +/- 3 linhas de produtos */}
+              {/* --- LISTA DE ITENS (Flex 1 - Ocupa o topo e cresce) --- */}
               <div className="no-scrollbar" style={{ 
-                  flex: '0 0 auto', // Não estica nem encolhe
-                  maxHeight: '180px', // TRAVA VISUAL EM 3 ITENS
-                  minHeight: items.length > 0 ? '60px' : '0px', // Garante que apareça se tiver item
+                  flex: 1, // O PULO DO GATO: Ocupa todo o espaço que o catálogo não usar
                   overflowY: 'auto', 
                   backgroundColor: '#f8fafc', 
                   borderBottom: `1px solid ${colors.border}`,
-                  boxShadow: 'inset 0 -10px 10px -10px rgba(0,0,0,0.05)'
               }}>
                 {items.length === 0 ? (
-                  <div style={{ padding: '15px', textAlign: 'center', color: '#94a3b8', fontSize: '0.8rem' }}>Nenhum item lançado ainda.</div>
+                  <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontSize: '0.9rem', padding: '20px' }}>
+                    <div style={{ textAlign: 'center' }}>
+                        <div style={{ fontSize: '2rem', marginBottom: '10px' }}>🍽️</div>
+                        Nenhum item lançado.<br/>Adicione itens abaixo.
+                    </div>
+                  </div>
                 ) : (
                   items.map(item => (
-                    <div key={item.id} style={{ 
-                        display: 'flex', justifyContent: 'space-between', alignItems: 'center', 
-                        padding: '10px 15px', background: editingItemId === item.id ? '#fff7ed' : 'white', 
-                        borderBottom: '1px solid #eee',
-                        borderLeft: editingItemId === item.id ? `4px solid ${colors.primary}` : 'none'
-                    }}>
-                      <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                        <span style={{ background: '#e0f2fe', color: '#0369a1', padding: '2px 8px', borderRadius: '6px', fontWeight: 800, fontSize: '0.8rem' }}>{item.quantity}x</span>
-                        <div style={{ fontWeight: 600, color: '#334155', fontSize: '0.9rem' }}>{item.product_name_snapshot}</div>
+                    <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 15px', background: 'white', borderBottom: '1px solid #eee' }}>
+                      <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                        <span style={{ background: '#e0f2fe', color: '#0369a1', padding: '4px 8px', borderRadius: '6px', fontWeight: 800, fontSize: '0.9rem', minWidth: '35px', textAlign: 'center' }}>{item.quantity}x</span>
+                        <div style={{ fontWeight: 600, color: '#334155', fontSize: '0.95rem' }}>{item.product_name_snapshot}</div>
                       </div>
-                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                        <span style={{ fontWeight: 800, color: '#334155', fontSize: '0.9rem' }}>R$ {(item.product_price_snapshot * item.quantity).toFixed(2)}</span>
+                      <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                        <span style={{ fontWeight: 800, color: '#334155', fontSize: '0.95rem' }}>R$ {(item.product_price_snapshot * item.quantity).toFixed(2)}</span>
                         
-                        {userRole === 'admin' && (
-                            <>
-                                {/* BOTÃO EDITAR */}
-                                <button onClick={() => handleEditItem(item)} style={{ border: 'none', background: '#eff6ff', borderRadius: '4px', cursor: 'pointer', fontSize: '1rem', padding: '4px', color: '#3b82f6' }}>✏️</button>
-                                {/* BOTÃO EXCLUIR */}
-                                <button onClick={() => handleRemoveItem(item.id)} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: '1rem', color: '#ef4444' }}>🗑️</button>
-                            </>
+                        {userRole === 'admin' ? (
+                          <button onClick={() => handleRemoveItem(item.id)} style={{ border: 'none', background: '#fee2e2', color: '#ef4444', cursor: 'pointer', fontSize: '1rem', width: '30px', height: '30px', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>🗑️</button>
+                        ) : (
+                           <button onClick={() => alert('🔒 Apenas gerentes cancelam itens.')} style={{ border: 'none', background: 'none', cursor: 'not-allowed', fontSize: '1rem', opacity: 0.3 }}>🔒</button>
                         )}
+                        
                       </div>
                     </div>
                   ))
                 )}
               </div>
 
-              {/* --- ÁREA DE LANÇAMENTO (Catálogo) --- */}
-              {userRole === 'admin' ? (
-                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: 'white', overflow: 'hidden' }}>
-                  
-                  {/* Busca e Categorias */}
-                  <div style={{ padding: '10px', borderBottom: `1px solid ${colors.border}`, flexShrink: 0 }}>
-                    <div style={{ position: 'relative', marginBottom: '10px' }}>
-                      <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', opacity: 0.5 }}>🔍</span>
-                      <input 
-                        placeholder="Buscar produto..." 
-                        value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
-                        style={{ width: '100%', padding: '10px 10px 10px 35px', borderRadius: '8px', border: `1px solid ${colors.border}`, fontSize: '0.95rem', outline: 'none' }}
-                      />
-                    </div>
-                    <div className="no-scrollbar" style={{ display: 'flex', gap: '6px', overflowX: 'auto', paddingBottom: '5px' }}>
-                      <button onClick={() => setSelectedCategory('TODAS')} style={{ padding: '6px 12px', borderRadius: '15px', border: 'none', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 700, background: selectedCategory === 'TODAS' ? colors.text : '#f1f5f9', color: selectedCategory === 'TODAS' ? 'white' : colors.textMuted, whiteSpace: 'nowrap' }}>TODAS</button>
-                      {categories.map(cat => (
-                        <button key={cat.id} onClick={() => setSelectedCategory(cat.name)} style={{ padding: '6px 12px', borderRadius: '15px', border: 'none', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 700, background: selectedCategory === cat.name ? cat.color : '#f1f5f9', color: selectedCategory === cat.name ? 'white' : colors.textMuted, whiteSpace: 'nowrap' }}>{cat.name}</button>
-                      ))}
-                    </div>
+              {/* --- CATÁLOGO + BUSCA + BOTÕES (Fixo embaixo, ~45% da tela) --- */}
+              <div style={{ 
+                  height: '45%', // Altura fixa para o catálogo garantir visibilidade
+                  display: 'flex', 
+                  flexDirection: 'column', 
+                  backgroundColor: 'white', 
+                  borderTop: `1px solid ${colors.border}` 
+              }}>
+                
+                {/* 1. Busca e Categorias (Fixo) */}
+                <div style={{ padding: '10px', flexShrink: 0 }}>
+                  <div style={{ position: 'relative', marginBottom: '8px' }}>
+                    <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', opacity: 0.5 }}>🔍</span>
+                    <input 
+                      placeholder="Buscar produto..." 
+                      value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
+                      style={{ width: '100%', padding: '10px 10px 10px 35px', borderRadius: '8px', border: `1px solid ${colors.border}`, fontSize: '0.95rem', outline: 'none', background: '#f1f5f9' }}
+                    />
                   </div>
-
-                  {/* Lista de Produtos */}
-                  <div className="no-scrollbar" style={{ flex: 1, overflowY: 'auto', padding: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    {filteredProducts.map(p => {
-                      const isSelected = selectedProductId === p.id
-                      return (
-                        <div 
-                          key={p.id} 
-                          onClick={() => {
-                              // Se clicar num produto diferente enquanto edita, sai do modo edição para evitar confusão
-                              if (editingItemId && isSelected) {
-                                  // Mantém seleção
-                              } else if (editingItemId) {
-                                  setEditingItemId(null)
-                                  setQuantity(1)
-                              }
-                              setSelectedProductId(p.id)
-                          }}
-                          style={{ 
-                            border: isSelected ? `2px solid ${colors.primary}` : `1px solid ${colors.border}`,
-                            backgroundColor: isSelected ? '#fff1f2' : 'white',
-                            borderRadius: '10px', padding: '12px 15px', cursor: 'pointer',
-                            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                            boxShadow: '0 1px 2px rgba(0,0,0,0.02)',
-                            transition: 'all 0.1s',
-                            flexShrink: 0
-                          }}
-                        >
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <span style={{ fontSize: '1rem', fontWeight: 700, color: colors.text, textTransform: 'capitalize' }}>{p.name}</span>
-                                <span style={{ fontSize: '0.6rem', color: 'white', background: getCategoryColor(p.category), padding: '2px 8px', borderRadius: '8px', fontWeight: 'bold', textTransform: 'uppercase' }}>{p.category.slice(0, 10)}</span>
-                            </div>
-                            {p.description && <span style={{ fontSize: '0.75rem', color: colors.textMuted }}>{p.description}</span>}
-                          </div>
-                          <div style={{ fontWeight: 800, color: colors.primary, fontSize: '1.1rem', whiteSpace: 'nowrap' }}>
-                            R$ {p.price.toFixed(2)}
-                          </div>
-                        </div>
-                      )
-                    })}
-                    {filteredProducts.length === 0 && (
-                        <div style={{ textAlign: 'center', padding: '30px', color: colors.textMuted, opacity: 0.7 }}>Nenhum produto encontrado.</div>
-                    )}
+                  <div className="no-scrollbar" style={{ display: 'flex', gap: '6px', overflowX: 'auto', paddingBottom: '5px' }}>
+                    <button onClick={() => setSelectedCategory('TODAS')} style={{ padding: '6px 12px', borderRadius: '15px', border: 'none', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 700, background: selectedCategory === 'TODAS' ? colors.text : '#f1f5f9', color: selectedCategory === 'TODAS' ? 'white' : colors.textMuted, whiteSpace: 'nowrap' }}>TODAS</button>
+                    {categories.map(cat => (
+                      <button key={cat.id} onClick={() => setSelectedCategory(cat.name)} style={{ padding: '6px 12px', borderRadius: '15px', border: 'none', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 700, background: selectedCategory === cat.name ? cat.color : '#f1f5f9', color: selectedCategory === cat.name ? 'white' : colors.textMuted, whiteSpace: 'nowrap' }}>{cat.name}</button>
+                    ))}
                   </div>
+                </div>
 
-                  {/* Controles de Adição/Edição */}
-                  <div style={{ padding: '10px', background: 'white', borderTop: `1px solid ${colors.border}`, display: 'flex', gap: '10px', boxShadow: '0 -4px 10px rgba(0,0,0,0.05)', flexShrink: 0 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                        <button onClick={() => setQuantity(Math.max(1, quantity - 1))} style={{...qtyBtnStyle, height: '45px', width: '45px'}}>-</button>
-                        <span style={{ fontWeight: 900, fontSize: '1.2rem', width: '35px', textAlign: 'center' }}>{quantity}</span>
-                        <button onClick={() => setQuantity(quantity + 1)} style={{...qtyBtnStyle, height: '45px', width: '45px'}}>+</button>
-                      </div>
-                      
-                      {/* Se estiver editando, mostra opção de cancelar */}
-                      {editingItemId && (
-                          <button 
-                            onClick={() => { setEditingItemId(null); setQuantity(1); setSelectedProductId(''); }}
-                            style={{ padding: '0 15px', borderRadius: '8px', border: '1px solid #ccc', background: 'white', color: colors.textMuted, fontWeight: 700 }}
-                          >
-                            ✕
-                          </button>
-                      )}
-
-                      <button 
-                        onClick={handleSaveItem} 
-                        disabled={!selectedProductId}
+                {/* 2. Grid de Produtos (Scrollável) */}
+                <div className="no-scrollbar" style={{ flex: 1, overflowY: 'auto', padding: '0 10px 10px 10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {filteredProducts.map(p => {
+                    const isSelected = selectedProductId === p.id
+                    return (
+                      <div 
+                        key={p.id} 
+                        onClick={() => setSelectedProductId(p.id)}
                         style={{ 
-                            flex: 1, 
-                            backgroundColor: !selectedProductId ? '#ccc' : (editingItemId ? '#ea580c' : colors.primary), // Laranja se editar, Vinho se criar
-                            color: 'white', border: 'none', borderRadius: '8px', fontWeight: 800, fontSize: '1rem' 
+                          border: isSelected ? `2px solid ${colors.primary}` : `1px solid ${colors.border}`,
+                          backgroundColor: isSelected ? '#eff6ff' : 'white',
+                          borderRadius: '10px', padding: '10px', cursor: 'pointer',
+                          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                          transition: 'all 0.1s',
+                          flexShrink: 0 
                         }}
                       >
-                        {editingItemId ? 'ATUALIZAR' : (selectedProductId ? 'ADICIONAR' : 'SELECIONE...')}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                           <span style={{ fontSize: '0.95rem', fontWeight: 700, color: colors.text }}>{p.name}</span>
+                           <span style={{ fontSize: '0.65rem', color: 'white', background: getCategoryColor(p.category), padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold', textTransform: 'uppercase', width: 'fit-content' }}>{p.category.slice(0, 15)}</span>
+                        </div>
+                        <div style={{ fontWeight: 800, color: colors.primary, fontSize: '1rem', whiteSpace: 'nowrap' }}>
+                           R$ {p.price.toFixed(2)}
+                        </div>
+                      </div>
+                    )
+                  })}
+                  {filteredProducts.length === 0 && (
+                      <div style={{ textAlign: 'center', padding: '20px', color: colors.textMuted, opacity: 0.7, fontSize: '0.8rem' }}>Nenhum produto encontrado.</div>
+                  )}
+                </div>
+
+                {/* 3. Controles de Adição e Rodapé (Fixo) */}
+                <div style={{ padding: '10px', background: 'white', borderTop: `1px solid ${colors.border}`, display: 'flex', flexDirection: 'column', gap: '10px', boxShadow: '0 -4px 10px rgba(0,0,0,0.05)', flexShrink: 0 }}>
+                    
+                    {/* Linha Quantidade e Botão Adicionar */}
+                    <div style={{ display: 'flex', gap: '10px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '5px', background: '#f1f5f9', borderRadius: '8px', padding: '2px' }}>
+                        <button onClick={() => setQuantity(Math.max(1, quantity - 1))} style={{...qtyBtnStyle, background: 'transparent', height: '40px', width: '35px'}}>-</button>
+                        <span style={{ fontWeight: 900, fontSize: '1.1rem', width: '30px', textAlign: 'center' }}>{quantity}</span>
+                        <button onClick={() => setQuantity(quantity + 1)} style={{...qtyBtnStyle, background: 'transparent', height: '40px', width: '35px'}}>+</button>
+                      </div>
+                      <button 
+                        onClick={handleAddItem} 
+                        disabled={!selectedProductId}
+                        style={{ flex: 1, backgroundColor: !selectedProductId ? '#e2e8f0' : colors.primary, color: !selectedProductId ? '#94a3b8' : 'white', border: 'none', borderRadius: '8px', fontWeight: 800, fontSize: '0.9rem', textTransform: 'uppercase' }}
+                      >
+                        {selectedProductId ? 'ADICIONAR' : 'SELECIONE UM ITEM'}
                       </button>
-                  </div>
+                    </div>
+
+                    {/* Linha Total e Fechar */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '5px', borderTop: '1px dashed #eee' }}>
+                      <div>
+                        <span style={{ fontSize: '0.65rem', fontWeight: 700, color: colors.textMuted, textTransform: 'uppercase' }}>TOTAL</span>
+                        <div style={{ fontSize: '1.4rem', fontWeight: 900, color: colors.primary, lineHeight: 1 }}>R$ {localTotal.toFixed(2)}</div>
+                      </div>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button onClick={handlePrint} style={{ padding: '10px', borderRadius: '8px', border: '1px solid #ccc', background: 'white', fontSize: '1.2rem' }}>🖨️</button>
+                        <button onClick={() => setIsPaymentStep(true)} disabled={items.length === 0} style={{ padding: '10px 15px', borderRadius: '8px', background: items.length > 0 ? '#16a34a' : '#cbd5e1', color: 'white', fontWeight: 800, border: 'none', fontSize: '0.85rem' }}>FECHAR ($)</button>
+                      </div>
+                    </div>
 
                 </div>
-              ) : (
-                <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', color: colors.textMuted, opacity: 0.6 }}>
-                  <div style={{ fontSize: '3rem' }}>🔒</div>
-                  <p>Modo Consulta</p>
-                </div>
-              )}
 
-              {/* RODAPÉ GERAL */}
-              <div style={{ padding: '12px 15px', background: '#f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: `1px solid ${colors.border}`, flexShrink: 0 }}>
-                <div>
-                  <span style={{ fontSize: '0.65rem', fontWeight: 700, color: colors.textMuted, textTransform: 'uppercase' }}>TOTAL MESA</span>
-                  <div style={{ fontSize: '1.6rem', fontWeight: 900, color: colors.primary, lineHeight: 1 }}>R$ {localTotal.toFixed(2)}</div>
-                </div>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <button onClick={handlePrint} style={{ padding: '10px', borderRadius: '8px', border: '1px solid #ccc', background: 'white', fontSize: '1.2rem' }}>🖨️</button>
-                  <button onClick={() => setIsPaymentStep(true)} disabled={items.length === 0} style={{ padding: '10px 15px', borderRadius: '8px', background: items.length > 0 ? '#16a34a' : '#cbd5e1', color: 'white', fontWeight: 800, border: 'none', fontSize: '0.9rem' }}>FECHAR ($)</button>
-                </div>
               </div>
             </>
           )}
