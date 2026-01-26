@@ -1,120 +1,121 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { colors } from '../styles/theme'
+
+// --- ÍCONES SVG ---
+const IconPen = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" /></svg>
+)
+const IconClose = () => (
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+)
+const IconPrint = () => (
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="6 9 6 2 18 2 18 9"></polyline>
+    <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+    <rect x="6" y="14" width="12" height="8"></rect>
+  </svg>
+)
 
 // --- TIPOS ---
 type Product = { id: string, name: string, price: number, category: string, org_id: string, active: boolean, description?: string }
 type Category = { id: string, name: string, color: string }
-type OrderItem = { 
-  id: string, 
-  product_name_snapshot: string, 
-  product_price_snapshot: number, 
-  quantity: number, 
-  org_id: string 
-}
+type OrderItem = { id: string, product_name_snapshot: string, product_price_snapshot: number, quantity: number, org_id: string }
+type Client = { id: string, name: string }
 
 interface Props {
-  orderId: string
-  label: string
-  onClose: () => void
-  onUpdate: () => void
-  userRole: string | null 
+  orderId: string, label: string, onClose: () => void, onUpdate: () => void, userRole: string | null 
 }
 
 export function OrderDetailsModal({ orderId, label, onClose, onUpdate, userRole }: Props) {
-  // Dados
   const [items, setItems] = useState<OrderItem[]>([])
   const [products, setProducts] = useState<Product[]>([])
   const [categories, setCategories] = useState<Category[]>([]) 
-  
-  // Controle de Interface
+  const [clients, setClients] = useState<Client[]>([])
   const [loading, setLoading] = useState(true)
   const [isPaymentStep, setIsPaymentStep] = useState(false)
+  const [showClientSelector, setShowClientSelector] = useState(false)
   const [myOrgId, setMyOrgId] = useState<string | null>(null)
-
-  // Filtros e Seleção
+  const [isCustomMode, setIsCustomMode] = useState(false)
+  const [customName, setCustomName] = useState('')
+  const [customPrice, setCustomPrice] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('TODAS')
   const [selectedProductId, setSelectedProductId] = useState('') 
   const [quantity, setQuantity] = useState(1)
+  const categoriesRef = useRef<HTMLDivElement>(null)
+  
+  const grenaColor = '#800020'
+  const orangeTheme = '#f97316'
 
   useEffect(() => { loadData() }, [orderId])
+  useEffect(() => {
+    const el = categoriesRef.current
+    if (el) {
+      const onWheel = (e: WheelEvent) => { if (e.deltaY === 0) return; e.preventDefault(); el.scrollLeft += e.deltaY }
+      el.addEventListener('wheel', onWheel); return () => el.removeEventListener('wheel', onWheel)
+    }
+  }, [categories])
 
   const loadData = async () => {
     try {
       setLoading(true)
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) return
-
-      const { data: profile } = await supabase
-        .from('profiles').select('org_id').eq('id', session.user.id).single()
-
+      const { data: profile } = await supabase.from('profiles').select('org_id').eq('id', session.user.id).single()
       if (profile?.org_id) {
         setMyOrgId(profile.org_id)
-        
-        const [itemsRes, prodRes, catRes] = await Promise.all([
+        const [itemsRes, prodRes, catRes, clientRes] = await Promise.all([
           supabase.from('order_items').select('*').eq('order_id', orderId).order('created_at', { ascending: true }),
           supabase.from('products').select('*').eq('org_id', profile.org_id).eq('active', true).order('name'),
-          supabase.from('categories').select('*').eq('org_id', profile.org_id).order('name')
+          supabase.from('categories').select('*').eq('org_id', profile.org_id).order('name'),
+          supabase.from('clients').select('id, name').eq('org_id', profile.org_id).order('name')
         ])
-        
-        if (itemsRes.data) setItems(itemsRes.data)
-        if (prodRes.data) setProducts(prodRes.data)
-        if (catRes.data) setCategories(catRes.data)
+        if (itemsRes.data) setItems(itemsRes.data); if (prodRes.data) setProducts(prodRes.data); if (catRes.data) setCategories(catRes.data); if (clientRes.data) setClients(clientRes.data)
       }
     } catch (err) { console.error(err) } finally { setLoading(false) }
   }
 
-  // --- LÓGICA DE FILTRAGEM ---
   const filteredProducts = products.filter(product => {
     const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase())
     const matchesCategory = selectedCategory === 'TODAS' || product.category === selectedCategory
     return matchesSearch && matchesCategory
   })
-
-  // --- AUXILIARES ---
-  const getCategoryColor = (catName: string) => {
-    const found = categories.find(c => c.name === catName)
-    return found ? found.color : '#94a3b8'
-  }
+  const getCategoryColor = (catName: string) => { const found = categories.find(c => c.name === catName); return found ? found.color : '#94a3b8' }
 
   const handleAddItem = async () => {
-    if (!selectedProductId || !myOrgId) return;
-    
-    const product = products.find(p => p.id === selectedProductId);
-    if (!product) return;
-
-    const novoItem = {
-      order_id: orderId, product_id: product.id, quantity: quantity, org_id: myOrgId,
-      product_name_snapshot: product.name, product_price_snapshot: product.price
-    };
-
-    const { error } = await supabase.from('order_items').insert([novoItem]);
-    if (error) alert(`Erro: ${error.message}`);
-    else {
-      // Feedback visual simples ou reset
-      // setSelectedProductId(''); // Opcional: manter selecionado para lançar vários rápido
-      setQuantity(1); 
-      await loadData(); 
-      onUpdate();
+    if (!myOrgId) return;
+    let payload: any = {}
+    if (isCustomMode) {
+        if (!customName.trim()) return alert('Digite o nome do item.')
+        const price = parseFloat(customPrice.replace(',', '.'))
+        if (isNaN(price) || price <= 0) return alert('Digite um preço válido.')
+        payload = { order_id: orderId, product_id: null, quantity: quantity, org_id: myOrgId, product_name_snapshot: customName.trim() + ' (Avulso)', product_price_snapshot: price }
+    } else {
+        if (!selectedProductId) return;
+        const product = products.find(p => p.id === selectedProductId);
+        if (!product) return;
+        payload = { order_id: orderId, product_id: product.id, quantity: quantity, org_id: myOrgId, product_name_snapshot: product.name, product_price_snapshot: product.price }
     }
+    const { error } = await supabase.from('order_items').insert([payload]);
+    if (error) { alert(`Erro: ${error.message}`) } else { setQuantity(1); setCustomName(''); setCustomPrice(''); await loadData(); onUpdate() }
   };
 
   const handleRemoveItem = async (itemId: string) => {
-    if (userRole !== 'admin') {
-      alert('🔒 Acesso Negado: Apenas gerentes podem remover itens lançados.\nPeça para um gerente cancelar este item.')
-      return
-    }
+    if (userRole !== 'admin') { alert('🔒 Acesso Negado: Apenas gerentes podem remover itens lançados.'); return }
     if (!confirm('Tem certeza que deseja remover este item?')) return;
-    const { error } = await supabase.from('order_items').delete().eq('id', itemId)
-    if (!error) { await loadData(); onUpdate(); }
+    const { error } = await supabase.from('order_items').delete().eq('id', itemId); if (!error) { await loadData(); onUpdate() }
   }
 
-  const handleFinishOrder = async (method: string) => {
-    if (!confirm(`Receber R$ ${localTotal.toFixed(2)} via ${method.toUpperCase()}?`)) return
-    const { error } = await supabase.from('orders').update({ status: 'concluida', payment_method: method, total: localTotal }).eq('id', orderId)
-    if (!error) { onUpdate(); onClose(); }
+  const handlePaymentSelection = (method: string) => { if (method === 'fiado') { setShowClientSelector(true) } else { handleFinishOrder(method, null) } }
+
+  const handleFinishOrder = async (method: string, clientId: string | null) => {
+    let confirmMsg = `Receber R$ ${localTotal.toFixed(2)} via ${method.toUpperCase()}?`
+    if (method === 'fiado') { const clientName = clients.find(c => c.id === clientId)?.name; confirmMsg = `⚠️ Confirmar FIADO para ${clientName}?\nValor: R$ ${localTotal.toFixed(2)}` }
+    if (!confirm(confirmMsg)) return
+    const { error } = await supabase.from('orders').update({ status: 'concluida', payment_method: method, total: localTotal, client_id: clientId }).eq('id', orderId)
+    if (!error) { onUpdate(); onClose() } else { alert('Erro ao fechar venda: ' + error.message) }
   }
 
   const handlePrint = () => {
@@ -124,193 +125,149 @@ export function OrderDetailsModal({ orderId, label, onClose, onUpdate, userRole 
 
   const localTotal = items.reduce((acc, item) => acc + (item.product_price_snapshot * item.quantity), 0)
 
-  // --- ESTILOS ---
-  const qtyBtnStyle = { 
-    flex: 1, height: '45px', border: 'none', background: '#f1f5f9', cursor: 'pointer', 
-    fontWeight: '900', fontSize: '1.5rem', color: colors.primary, borderRadius: '8px',
-    display: 'flex', alignItems: 'center', justifyContent: 'center'
-  }
-  const btnPayStyle = (bg: string) => ({
-    backgroundColor: bg, color: 'white', border: 'none', padding: '15px', borderRadius: '10px', 
-    fontWeight: 700, cursor: 'pointer', display: 'flex', flexDirection: 'column' as 'column', alignItems: 'center', gap: '5px'
-  })
+  const touchBtnBase = { cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, borderRadius: '12px', border: 'none', transition: 'transform 0.1s', minHeight: '52px', fontSize: '1rem' }
+  const qtyBtnStyle = { ...touchBtnBase, background: '#f1f5f9', color: colors.primary, fontSize: '1.8rem', flex: 1 }
+  const btnPayStyle = (bg: string) => ({ ...touchBtnBase, backgroundColor: bg, color: 'white', flexDirection: 'column' as 'column', gap: '4px', padding: '10px' })
 
   return (
     <>
-      {/* CSS Global para scroll invisível (Correção do erro de TS) */}
       <style jsx global>{`
-        .no-scrollbar {
-          -ms-overflow-style: none;  /* IE and Edge */
-          scrollbar-width: none;  /* Firefox */
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        input:focus { outline: 2px solid ${colors.primary}; }
+        
+        /* BOTÃO GRENÁ INTERATIVO */
+        .btn-grena-interactive {
+          background-color: white;
+          color: ${grenaColor};
+          border: 1px solid ${grenaColor};
+          transition: all 0.1s ease-in-out;
         }
-        .no-scrollbar::-webkit-scrollbar {
-          display: none; /* Chrome, Safari and Opera */
+        .btn-grena-interactive:active {
+          background-color: ${grenaColor};
+          color: white;
+          transform: scale(0.95);
         }
       `}</style>
 
       <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.8)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '10px', backdropFilter: 'blur(3px)' }}>
-        <div style={{ 
-            backgroundColor: '#fff', 
-            width: '100%', 
-            maxWidth: '600px', 
-            height: '90vh', // Altura fixa e alta
-            borderRadius: '16px', 
-            display: 'flex', 
-            flexDirection: 'column', 
-            overflow: 'hidden', 
-            boxShadow: '0 10px 25px rgba(0,0,0,0.2)'
-        }}>
+        <div style={{ backgroundColor: '#fff', width: '100%', maxWidth: '600px', height: '95vh', maxHeight: '100%', borderRadius: '16px', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 10px 25px rgba(0,0,0,0.2)' }}>
           
-          {/* HEADER (Fixo) */}
-          <div style={{ padding: '12px 15px', borderBottom: `1px solid ${colors.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'white', flexShrink: 0 }}>
-            <div>
-              <h2 style={{ margin: 0, fontSize: '1.2rem', color: colors.primary, fontWeight: 900, textTransform: 'capitalize' }}>{label}</h2>
-              <span style={{ fontSize: '0.8rem', color: colors.textMuted }}>{items.length} itens lançados</span>
-            </div>
-            <button onClick={onClose} style={{ border: 'none', background: '#f1f5f9', width: '32px', height: '32px', borderRadius: '50%', fontSize: '1rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
+          <div style={{ padding: '15px 20px', borderBottom: `1px solid ${colors.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'white', flexShrink: 0 }}>
+            <div><h2 style={{ margin: 0, fontSize: '1.4rem', color: colors.primary, fontWeight: 900, textTransform: 'capitalize' }}>{label}</h2><span style={{ fontSize: '0.9rem', color: colors.textMuted }}>{items.length} itens lançados</span></div>
+            <button onClick={onClose} style={{ border: 'none', background: '#f1f5f9', width: '42px', height: '42px', borderRadius: '50%', fontSize: '1.2rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
           </div>
 
-          {isPaymentStep ? (
-            // TELA DE PAGAMENTO (Ocupa tudo)
+          {showClientSelector ? (
+            <div style={{ flex: 1, padding: '20px', display: 'flex', flexDirection: 'column', background: '#fffbeb' }}>
+                <h3 style={{ textAlign: 'center', color: '#b45309', margin: '0 0 20px' }}>Selecione o Cliente</h3>
+                <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    {clients.length === 0 && <p style={{textAlign: 'center', color: '#999'}}>Nenhum cliente cadastrado.</p>}
+                    {clients.map(client => (
+                        <button key={client.id} onClick={() => handleFinishOrder('fiado', client.id)} style={{ ...touchBtnBase, justifyContent: 'flex-start', padding: '0 20px', border: '2px solid #fcd34d', background: 'white', color: '#78350f' }}>👤 {client.name}</button>
+                    ))}
+                </div>
+                <button onClick={() => setShowClientSelector(false)} style={{ ...touchBtnBase, marginTop: '15px', background: 'white', border: '2px solid #ccc', color: colors.text }}>Cancelar</button>
+            </div>
+          ) : isPaymentStep ? (
             <div className="no-scrollbar" style={{ flex: 1, padding: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', backgroundColor: '#fafafa', overflowY: 'auto' }}>
-              <div style={{ fontSize: '3rem', fontWeight: 900, color: '#166534', marginBottom: '20px' }}>R$ {localTotal.toFixed(2)}</div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', width: '100%', marginBottom: '20px' }}>
-                <button onClick={() => handleFinishOrder('pix')} style={btnPayStyle('#06b6d4')}>💠 PIX</button>
-                <button onClick={() => handleFinishOrder('dinheiro')} style={btnPayStyle('#22c55e')}>💵 DINHEIRO</button>
-                <button onClick={() => handleFinishOrder('cartao_debito')} style={btnPayStyle('#3b82f6')}>💳 DÉBITO</button>
-                <button onClick={() => handleFinishOrder('cartao_credito')} style={btnPayStyle('#1d4ed8')}>💳 CRÉDITO</button>
-                <button onClick={() => handleFinishOrder('fiado')} style={{ ...btnPayStyle('#f97316'), gridColumn: 'span 2' }}>📝 FIADO</button>
+              <div style={{ fontSize: '3.5rem', fontWeight: 900, color: '#166534', marginBottom: '30px' }}>R$ {localTotal.toFixed(2)}</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', width: '100%', marginBottom: '20px' }}>
+                <button onClick={() => handlePaymentSelection('pix')} style={btnPayStyle('#06b6d4')}>💠 PIX</button>
+                <button onClick={() => handlePaymentSelection('dinheiro')} style={btnPayStyle('#22c55e')}>💵 DINHEIRO</button>
+                <button onClick={() => handlePaymentSelection('cartao_debito')} style={btnPayStyle('#3b82f6')}>💳 DÉBITO</button>
+                <button onClick={() => handlePaymentSelection('cartao_credito')} style={btnPayStyle('#1d4ed8')}>💳 CRÉDITO</button>
+                <button onClick={() => handlePaymentSelection('fiado')} style={{ ...btnPayStyle(orangeTheme), gridColumn: 'span 2' }}>📝 FIADO</button>
               </div>
-              <button onClick={() => setIsPaymentStep(false)} style={{ padding: '15px', width: '100%', borderRadius: '10px', background: 'white', border: '1px solid #ddd', fontWeight: 700 }}>Voltar</button>
+              <button onClick={() => setIsPaymentStep(false)} style={{ ...touchBtnBase, width: '100%', background: 'white', border: '2px solid #ddd', color: colors.text }}>Voltar</button>
             </div>
           ) : (
             <>
-              {/* --- LISTA DE ITENS (Flex 1 - Ocupa o topo e cresce) --- */}
-              <div className="no-scrollbar" style={{ 
-                  flex: 1, // O PULO DO GATO: Ocupa todo o espaço que o catálogo não usar
-                  overflowY: 'auto', 
-                  backgroundColor: '#f8fafc', 
-                  borderBottom: `1px solid ${colors.border}`,
-              }}>
+              <div className="no-scrollbar" style={{ flex: 1, overflowY: 'auto', backgroundColor: '#f8fafc', borderBottom: `1px solid ${colors.border}` }}>
                 {items.length === 0 ? (
-                  <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontSize: '0.9rem', padding: '20px' }}>
-                    <div style={{ textAlign: 'center' }}>
-                        <div style={{ fontSize: '2rem', marginBottom: '10px' }}>🍽️</div>
-                        Nenhum item lançado.<br/>Adicione itens abaixo.
-                    </div>
-                  </div>
+                  <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontSize: '1rem', padding: '20px', flexDirection: 'column', gap: '10px' }}><div style={{ fontSize: '3rem' }}>🍽️</div><div>Nenhum item lançado.<br/>Adicione itens abaixo.</div></div>
                 ) : (
                   items.map(item => (
-                    <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 15px', background: 'white', borderBottom: '1px solid #eee' }}>
-                      <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                        <span style={{ background: '#e0f2fe', color: '#0369a1', padding: '4px 8px', borderRadius: '6px', fontWeight: 800, fontSize: '0.9rem', minWidth: '35px', textAlign: 'center' }}>{item.quantity}x</span>
-                        <div style={{ fontWeight: 600, color: '#334155', fontSize: '0.95rem' }}>{item.product_name_snapshot}</div>
+                    <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px 20px', background: 'white', borderBottom: '1px solid #eee' }}>
+                      <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
+                        <span style={{ background: '#e0f2fe', color: '#0369a1', padding: '6px 12px', borderRadius: '8px', fontWeight: 800, fontSize: '1rem', minWidth: '40px', textAlign: 'center' }}>{item.quantity}x</span>
+                        <div style={{ fontWeight: 700, color: '#334155', fontSize: '1rem' }}>{item.product_name_snapshot}</div>
                       </div>
-                      <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                        <span style={{ fontWeight: 800, color: '#334155', fontSize: '0.95rem' }}>R$ {(item.product_price_snapshot * item.quantity).toFixed(2)}</span>
-                        
-                        {userRole === 'admin' ? (
-                          <button onClick={() => handleRemoveItem(item.id)} style={{ border: 'none', background: '#fee2e2', color: '#ef4444', cursor: 'pointer', fontSize: '1rem', width: '30px', height: '30px', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>🗑️</button>
-                        ) : (
-                           <button onClick={() => alert('🔒 Apenas gerentes cancelam itens.')} style={{ border: 'none', background: 'none', cursor: 'not-allowed', fontSize: '1rem', opacity: 0.3 }}>🔒</button>
-                        )}
-                        
+                      <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
+                        <span style={{ fontWeight: 800, color: '#334155', fontSize: '1rem' }}>R$ {(item.product_price_snapshot * item.quantity).toFixed(2)}</span>
+                        {userRole === 'admin' ? (<button onClick={() => handleRemoveItem(item.id)} style={{ border: 'none', background: '#fee2e2', color: '#ef4444', cursor: 'pointer', fontSize: '1.2rem', width: '40px', height: '40px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>🗑️</button>) : (<button onClick={() => alert('🔒 Apenas gerentes cancelam itens.')} style={{ border: 'none', background: 'none', cursor: 'not-allowed', fontSize: '1.2rem', opacity: 0.3 }}>🔒</button>)}
                       </div>
                     </div>
                   ))
                 )}
               </div>
 
-              {/* --- CATÁLOGO + BUSCA + BOTÕES (Fixo embaixo, ~45% da tela) --- */}
-              <div style={{ 
-                  height: '45%', // Altura fixa para o catálogo garantir visibilidade
-                  display: 'flex', 
-                  flexDirection: 'column', 
-                  backgroundColor: 'white', 
-                  borderTop: `1px solid ${colors.border}` 
-              }}>
-                
-                {/* 1. Busca e Categorias (Fixo) */}
-                <div style={{ padding: '10px', flexShrink: 0 }}>
-                  <div style={{ position: 'relative', marginBottom: '8px' }}>
-                    <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', opacity: 0.5 }}>🔍</span>
-                    <input 
-                      placeholder="Buscar produto..." 
-                      value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
-                      style={{ width: '100%', padding: '10px 10px 10px 35px', borderRadius: '8px', border: `1px solid ${colors.border}`, fontSize: '0.95rem', outline: 'none', background: '#f1f5f9' }}
-                    />
-                  </div>
-                  <div className="no-scrollbar" style={{ display: 'flex', gap: '6px', overflowX: 'auto', paddingBottom: '5px' }}>
-                    <button onClick={() => setSelectedCategory('TODAS')} style={{ padding: '6px 12px', borderRadius: '15px', border: 'none', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 700, background: selectedCategory === 'TODAS' ? colors.text : '#f1f5f9', color: selectedCategory === 'TODAS' ? 'white' : colors.textMuted, whiteSpace: 'nowrap' }}>TODAS</button>
-                    {categories.map(cat => (
-                      <button key={cat.id} onClick={() => setSelectedCategory(cat.name)} style={{ padding: '6px 12px', borderRadius: '15px', border: 'none', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 700, background: selectedCategory === cat.name ? cat.color : '#f1f5f9', color: selectedCategory === cat.name ? 'white' : colors.textMuted, whiteSpace: 'nowrap' }}>{cat.name}</button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* 2. Grid de Produtos (Scrollável) */}
-                <div className="no-scrollbar" style={{ flex: 1, overflowY: 'auto', padding: '0 10px 10px 10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {filteredProducts.map(p => {
-                    const isSelected = selectedProductId === p.id
-                    return (
-                      <div 
-                        key={p.id} 
-                        onClick={() => setSelectedProductId(p.id)}
-                        style={{ 
-                          border: isSelected ? `2px solid ${colors.primary}` : `1px solid ${colors.border}`,
-                          backgroundColor: isSelected ? '#eff6ff' : 'white',
-                          borderRadius: '10px', padding: '10px', cursor: 'pointer',
-                          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                          transition: 'all 0.1s',
-                          flexShrink: 0 
-                        }}
-                      >
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                           <span style={{ fontSize: '0.95rem', fontWeight: 700, color: colors.text }}>{p.name}</span>
-                           <span style={{ fontSize: '0.65rem', color: 'white', background: getCategoryColor(p.category), padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold', textTransform: 'uppercase', width: 'fit-content' }}>{p.category.slice(0, 15)}</span>
-                        </div>
-                        <div style={{ fontWeight: 800, color: colors.primary, fontSize: '1rem', whiteSpace: 'nowrap' }}>
-                           R$ {p.price.toFixed(2)}
-                        </div>
+              <div style={{ height: '48%', display: 'flex', flexDirection: 'column', backgroundColor: 'white', borderTop: `1px solid ${colors.border}` }}>
+                <div style={{ padding: '15px 15px 5px 15px', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  {isCustomMode ? (
+                      <div style={{ width: '100%', padding: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fff7ed', borderRadius: '12px', color: orangeTheme, fontWeight: 'bold', border: `2px dashed ${orangeTheme}`, fontSize: '1rem' }}>Modo Item Avulso Ativado</div>
+                  ) : (
+                      <div style={{ position: 'relative', width: '100%' }}>
+                          <span style={{ position: 'absolute', left: '15px', top: '50%', transform: 'translateY(-50%)', opacity: 0.5, fontSize: '1.2rem' }}>🔍</span>
+                          <input placeholder="Buscar produto..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} style={{ width: '100%', padding: '0 15px 0 45px', height: '52px', borderRadius: '12px', border: `2px solid ${colors.border}`, fontSize: '1rem', outline: 'none', background: '#f8fafc' }} />
                       </div>
-                    )
-                  })}
-                  {filteredProducts.length === 0 && (
-                      <div style={{ textAlign: 'center', padding: '20px', color: colors.textMuted, opacity: 0.7, fontSize: '0.8rem' }}>Nenhum produto encontrado.</div>
+                  )}
+                  {!isCustomMode && (
+                      <div ref={categoriesRef} className="no-scrollbar" style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '5px' }}>
+                        <button onClick={() => setSelectedCategory('TODAS')} style={{ padding: '10px 16px', borderRadius: '20px', border: 'none', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 700, background: selectedCategory === 'TODAS' ? colors.text : '#f1f5f9', color: selectedCategory === 'TODAS' ? 'white' : colors.textMuted, whiteSpace: 'nowrap' }}>TODAS</button>
+                        {categories.map(cat => (
+                          <button key={cat.id} onClick={() => setSelectedCategory(cat.name)} style={{ padding: '10px 16px', borderRadius: '20px', border: 'none', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 700, background: selectedCategory === cat.name ? cat.color : '#f1f5f9', color: selectedCategory === cat.name ? 'white' : colors.textMuted, whiteSpace: 'nowrap' }}>{cat.name}</button>
+                        ))}
+                      </div>
                   )}
                 </div>
 
-                {/* 3. Controles de Adição e Rodapé (Fixo) */}
-                <div style={{ padding: '10px', background: 'white', borderTop: `1px solid ${colors.border}`, display: 'flex', flexDirection: 'column', gap: '10px', boxShadow: '0 -4px 10px rgba(0,0,0,0.05)', flexShrink: 0 }}>
-                    
-                    {/* Linha Quantidade e Botão Adicionar */}
-                    <div style={{ display: 'flex', gap: '10px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '5px', background: '#f1f5f9', borderRadius: '8px', padding: '2px' }}>
-                        <button onClick={() => setQuantity(Math.max(1, quantity - 1))} style={{...qtyBtnStyle, background: 'transparent', height: '40px', width: '35px'}}>-</button>
-                        <span style={{ fontWeight: 900, fontSize: '1.1rem', width: '30px', textAlign: 'center' }}>{quantity}</span>
-                        <button onClick={() => setQuantity(quantity + 1)} style={{...qtyBtnStyle, background: 'transparent', height: '40px', width: '35px'}}>+</button>
+                <div className="no-scrollbar" style={{ flex: 1, overflowY: 'auto', padding: '5px 15px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  {isCustomMode ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', paddingTop: '10px' }}>
+                          <input autoFocus placeholder="Nome do Item (Ex: Rolha, Taxa...)" value={customName} onChange={e => setCustomName(e.target.value)} style={{ width: '100%', height: '55px', padding: '0 15px', borderRadius: '12px', border: `2px solid ${colors.border}`, fontSize: '1.1rem' }} />
+                          <input type="number" placeholder="Preço (R$)" value={customPrice} onChange={e => setCustomPrice(e.target.value)} style={{ width: '100%', height: '55px', padding: '0 15px', borderRadius: '12px', border: `2px solid ${colors.border}`, fontSize: '1.1rem' }} />
+                          <p style={{ fontSize: '0.8rem', color: colors.textMuted, textAlign: 'center', margin: 0 }}>Este item será adicionado apenas nesta comanda.</p>
                       </div>
-                      <button 
-                        onClick={handleAddItem} 
-                        disabled={!selectedProductId}
-                        style={{ flex: 1, backgroundColor: !selectedProductId ? '#e2e8f0' : colors.primary, color: !selectedProductId ? '#94a3b8' : 'white', border: 'none', borderRadius: '8px', fontWeight: 800, fontSize: '0.9rem', textTransform: 'uppercase' }}
-                      >
-                        {selectedProductId ? 'ADICIONAR' : 'SELECIONE UM ITEM'}
-                      </button>
+                  ) : (
+                      <>
+                        {filteredProducts.map(p => {
+                            const isSelected = selectedProductId === p.id
+                            return (
+                            <div key={p.id} onClick={() => setSelectedProductId(p.id)} style={{ border: isSelected ? `2px solid ${colors.primary}` : `1px solid ${colors.border}`, backgroundColor: isSelected ? '#eff6ff' : 'white', borderRadius: '12px', padding: '12px 15px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', transition: 'all 0.1s', flexShrink: 0, minHeight: '60px' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                <span style={{ fontSize: '1rem', fontWeight: 700, color: colors.text }}>{p.name}</span>
+                                <span style={{ fontSize: '0.7rem', color: 'white', background: getCategoryColor(p.category), padding: '4px 8px', borderRadius: '6px', fontWeight: 'bold', textTransform: 'uppercase', width: 'fit-content' }}>{p.category.slice(0, 15)}</span>
+                                </div>
+                                <div style={{ fontWeight: 800, color: colors.primary, fontSize: '1.1rem', whiteSpace: 'nowrap' }}>R$ {p.price.toFixed(2)}</div>
+                            </div>
+                            )
+                        })}
+                        {filteredProducts.length === 0 && <div style={{ textAlign: 'center', padding: '20px', color: colors.textMuted, opacity: 0.7, fontSize: '0.9rem' }}>Nenhum produto encontrado.</div>}
+                      </>
+                  )}
+                </div>
+
+                <div style={{ padding: '15px', background: 'white', borderTop: `1px solid ${colors.border}`, display: 'flex', flexDirection: 'column', gap: '12px', boxShadow: '0 -4px 10px rgba(0,0,0,0.05)', flexShrink: 0 }}>
+                    <div style={{ display: 'flex', gap: '12px', height: '55px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '5px', background: '#f1f5f9', borderRadius: '12px', padding: '4px', flex: 0.4 }}>
+                        <button onClick={() => setQuantity(Math.max(1, quantity - 1))} style={{...qtyBtnStyle}}>-</button>
+                        <span style={{ fontWeight: 900, fontSize: '1.3rem', width: '35px', textAlign: 'center' }}>{quantity}</span>
+                        <button onClick={() => setQuantity(quantity + 1)} style={{...qtyBtnStyle}}>+</button>
+                      </div>
+                      <button onClick={handleAddItem} disabled={!isCustomMode && !selectedProductId} style={{ ...touchBtnBase, flex: 1, backgroundColor: (!isCustomMode && !selectedProductId) ? '#e2e8f0' : colors.primary, color: (!isCustomMode && !selectedProductId) ? '#94a3b8' : 'white', fontSize: '1rem', textTransform: 'uppercase' }}>{isCustomMode ? 'ADICIONAR AVULSO' : (selectedProductId ? 'ADICIONAR ITEM' : 'SELECIONE...')}</button>
                     </div>
 
-                    {/* Linha Total e Fechar */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '5px', borderTop: '1px dashed #eee' }}>
-                      <div>
-                        <span style={{ fontSize: '0.65rem', fontWeight: 700, color: colors.textMuted, textTransform: 'uppercase' }}>TOTAL</span>
-                        <div style={{ fontSize: '1.4rem', fontWeight: 900, color: colors.primary, lineHeight: 1 }}>R$ {localTotal.toFixed(2)}</div>
-                      </div>
-                      <div style={{ display: 'flex', gap: '8px' }}>
-                        <button onClick={handlePrint} style={{ padding: '10px', borderRadius: '8px', border: '1px solid #ccc', background: 'white', fontSize: '1.2rem' }}>🖨️</button>
-                        <button onClick={() => setIsPaymentStep(true)} disabled={items.length === 0} style={{ padding: '10px 15px', borderRadius: '8px', background: items.length > 0 ? '#16a34a' : '#cbd5e1', color: 'white', fontWeight: 800, border: 'none', fontSize: '0.85rem' }}>FECHAR ($)</button>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '8px', borderTop: '1px dashed #eee' }}>
+                      <div><span style={{ fontSize: '0.75rem', fontWeight: 800, color: colors.textMuted, textTransform: 'uppercase' }}>TOTAL MESA</span><div style={{ fontSize: '1.6rem', fontWeight: 900, color: colors.primary, lineHeight: 1 }}>R$ {localTotal.toFixed(2)}</div></div>
+                      <div style={{ display: 'flex', gap: '10px' }}>
+                        {/* BOTÕES DE AÇÃO: AVULSO + PRINT */}
+                        <button onClick={() => setIsCustomMode(!isCustomMode)} style={{ ...touchBtnBase, width: '55px', border: `2px solid ${isCustomMode ? orangeTheme : '#ccc'}`, background: isCustomMode ? '#fff7ed' : 'white', color: isCustomMode ? orangeTheme : colors.text }} title="Item Avulso"> {isCustomMode ? <IconClose /> : <IconPen />} </button>
+                        {/* NOVO BOTÃO PRINT GRENÁ INTERATIVO */}
+                        <button onClick={handlePrint} className="btn-grena-interactive" style={{ ...touchBtnBase, width: '55px' }} title="Imprimir Comanda"><IconPrint /></button>
+                        <button onClick={() => setIsPaymentStep(true)} disabled={items.length === 0} style={{ ...touchBtnBase, padding: '0 20px', background: items.length > 0 ? '#16a34a' : '#cbd5e1', color: 'white' }}>FECHAR ($)</button>
                       </div>
                     </div>
-
                 </div>
 
               </div>

@@ -3,9 +3,16 @@ import { useEffect, useState, FormEvent } from 'react'
 import { supabase } from './lib/supabaseClient'
 import { useRouter } from 'next/navigation'
 import { colors, globalStyles } from './styles/theme'
-// IMPORTAMOS O HEADER CENTRALIZADO
 import { Header } from './components/Header'
 import { OrderDetailsModal } from './components/OrderDetailsModal'
+
+// --- ÍCONE SVG DA LIXEIRA (NOVO) ---
+const IconTrash = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="3 6 5 6 21 6"></polyline>
+    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+  </svg>
+)
 
 type Order = {
   id: string; label: string; status: 'aberta' | 'pagamento' | 'concluida' | 'cancelada'; total: number; org_id: string;
@@ -192,13 +199,11 @@ export default function Dashboard() {
   useEffect(() => { 
     checkSessionAndFetch()
     
-    // 1. Relógio em Tempo Real
     const timer = setInterval(() => {
       const now = new Date()
       setCurrentTime(now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }))
     }, 1000)
 
-    // 2. Escolher Versículo do Dia
     const dayOfYear = Math.floor((new Date().getTime() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 1000 / 60 / 60 / 24)
     setDailyVerse(VERSICULOS[dayOfYear % VERSICULOS.length])
 
@@ -248,7 +253,6 @@ export default function Dashboard() {
 
   if (loading) return null
 
-  // Data Formatada
   const dateStr = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })
 
   return (
@@ -264,29 +268,18 @@ export default function Dashboard() {
           border: `1px solid ${colors.border}`, boxShadow: '0 2px 4px rgba(0,0,0,0.02)',
           display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center'
         }}>
-           {/* HORA GRANDE */}
-           <div style={{ fontSize: '2.5rem', fontWeight: 900, color: colors.primary, lineHeight: 1 }}>
-             {currentTime || '--:--'}
-           </div>
-           
-           {/* DATA */}
-           <div style={{ fontSize: '0.9rem', color: colors.textMuted, textTransform: 'capitalize', marginBottom: '20px' }}>
-             {dateStr}
-           </div>
+            <div style={{ fontSize: '2.5rem', fontWeight: 900, color: colors.primary, lineHeight: 1 }}>
+              {currentTime || '--:--'}
+            </div>
+            
+            <div style={{ fontSize: '0.9rem', color: colors.textMuted, textTransform: 'capitalize', marginBottom: '20px' }}>
+              {dateStr}
+            </div>
 
-           {/* VERSÍCULO DESTAQUE (Discreto) */}
-           <div style={{ 
-             backgroundColor: '#f8fafc',  
-             color: '#475569',            
-             padding: '12px 20px', 
-             borderRadius: '12px', 
-             border: `1px solid ${colors.border}`, 
-             maxWidth: '500px', 
-             width: '100%'
-           }}>
-             <p style={{ margin: 0, fontStyle: 'italic', fontWeight: 600, fontSize: '0.9rem', lineHeight: '1.4' }}>“{dailyVerse.text}”</p>
-             <span style={{ display: 'block', fontSize: '0.7rem', marginTop: '6px', fontWeight: 800, textTransform: 'uppercase', color: '#94a3b8' }}>{dailyVerse.ref}</span>
-           </div>
+            <div style={{ backgroundColor: '#f8fafc', color: '#475569', padding: '12px 20px', borderRadius: '12px', border: `1px solid ${colors.border}`, maxWidth: '500px', width: '100%' }}>
+              <p style={{ margin: 0, fontStyle: 'italic', fontWeight: 600, fontSize: '0.9rem', lineHeight: '1.4' }}>“{dailyVerse.text}”</p>
+              <span style={{ display: 'block', fontSize: '0.7rem', marginTop: '6px', fontWeight: 800, textTransform: 'uppercase', color: '#94a3b8' }}>{dailyVerse.ref}</span>
+            </div>
         </div>
 
         {/* TÍTULO DA SEÇÃO */}
@@ -316,7 +309,25 @@ export default function Dashboard() {
                 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                   <span style={{ fontSize: '1.1rem', fontWeight: 800, color: colors.text, textTransform: 'capitalize' }}>{order.label}</span>
-                  <div onClick={(e) => handleDeleteOrder(e, order.id, order.label, order.total)} style={{ color: '#ef4444', opacity: 0.5, fontSize: '1.1rem', padding: '5px' }}>🗑️</div>
+                  {/* BOTÃO LIXEIRA PADRONIZADO (IconTrash + Style) */}
+                  <button
+                    onClick={(e) => handleDeleteOrder(e, order.id, order.label, order.total)}
+                    style={{
+                      background: '#fee2e2',
+                      border: 'none',
+                      borderRadius: '8px',
+                      width: '32px',
+                      height: '32px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#ef4444',
+                      cursor: 'pointer'
+                    }}
+                    title="Excluir Mesa"
+                  >
+                    <IconTrash />
+                  </button>
                 </div>
                 <div style={{ textAlign: 'right' }}>
                    <span style={{ fontSize: '1.3rem', fontWeight: 900, color: colors.primary }}>R$ {order.total.toFixed(2)}</span>

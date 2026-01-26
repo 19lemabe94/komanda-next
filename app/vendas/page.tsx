@@ -6,6 +6,11 @@ import { colors, globalStyles } from '../styles/theme'
 import { Header } from '../components/Header'
 import { OrderDetailsModal } from '../components/OrderDetailsModal'
 
+// --- ÍCONES SVG ---
+const IconTrash = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+const IconCalendar = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+const IconSearch = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+
 type ClosedOrder = {
   id: string
   label: string
@@ -29,10 +34,8 @@ export default function VendasPage() {
   const router = useRouter()
   
   // FUNÇÃO SEGURA PARA PEGAR DATA LOCAL (YYYY-MM-DD)
-  // Resolve o erro "Invalid time value" no iPhone/Safari
   const getLocalToday = () => {
     const now = new Date()
-    // Ajusta o fuso horário manualmente para garantir a data local correta
     const offset = now.getTimezoneOffset() * 60000
     const localDate = new Date(now.getTime() - offset)
     return localDate.toISOString().split('T')[0]
@@ -40,7 +43,7 @@ export default function VendasPage() {
   
   const [orders, setOrders] = useState<ClosedOrder[]>([])
   const [loading, setLoading] = useState(true)
-  const [dateFilter, setDateFilter] = useState(getLocalToday()) // Usa a função segura
+  const [dateFilter, setDateFilter] = useState(getLocalToday()) 
   const [selectedOrder, setSelectedOrder] = useState<{id: string, label: string} | null>(null)
   const [userRole, setUserRole] = useState<string | null>(null) 
   
@@ -67,12 +70,9 @@ export default function VendasPage() {
         if (profile?.org_id) {
         setUserRole(profile.role)
 
-        // Criação segura das datas de início e fim do dia
-        // Adicionamos o 'T' e o horário explicitamente para formato ISO
         const startStr = `${dateFilter}T00:00:00`
         const endStr = `${dateFilter}T23:59:59`
         
-        // Verifica se a data é válida antes de chamar o banco
         const startDate = new Date(startStr)
         const endDate = new Date(endStr)
 
@@ -87,8 +87,6 @@ export default function VendasPage() {
             .select('*')
             .eq('org_id', profile.org_id)
             .neq('status', 'aberta')
-            // Ajuste de Fuso: subtraímos 3 horas (ou o offset) se necessário, 
-            // mas o método padrão ISO aqui deve funcionar bem se o banco estiver em UTC
             .gte('created_at', startDate.toISOString())
             .lte('created_at', endDate.toISOString())
             .order('created_at', { ascending: false })
@@ -183,7 +181,7 @@ export default function VendasPage() {
         {/* FILTROS */}
         <div style={{ marginBottom: '25px', display: 'flex', gap: '15px', flexWrap: 'wrap' }}>
           <div style={{ flex: 1, minWidth: '200px', display: 'flex', alignItems: 'center', gap: '15px', background: 'white', padding: '15px 20px', borderRadius: '12px', border: `1px solid ${colors.border}`, boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
-            <span style={{ fontSize: '1.2rem' }}>📅</span>
+            <span style={{ color: colors.textMuted }}><IconCalendar /></span>
             <div style={{ flex: 1 }}>
               <label style={{ fontSize: '0.75rem', fontWeight: 800, color: colors.textMuted, display: 'block', marginBottom: '2px', textTransform: 'uppercase' }}>Data</label>
               <input 
@@ -196,7 +194,7 @@ export default function VendasPage() {
           </div>
 
           <div style={{ flex: 1.5, minWidth: '250px', display: 'flex', alignItems: 'center', gap: '15px', background: 'white', padding: '15px 20px', borderRadius: '12px', border: `1px solid ${colors.border}`, boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
-            <span style={{ fontSize: '1.2rem' }}>🔍</span>
+            <span style={{ color: colors.textMuted }}><IconSearch /></span>
             <div style={{ flex: 1 }}>
               <label style={{ fontSize: '0.75rem', fontWeight: 800, color: colors.textMuted, display: 'block', marginBottom: '2px', textTransform: 'uppercase' }}>Buscar Venda</label>
               <input 
@@ -289,7 +287,7 @@ export default function VendasPage() {
                       style={{ background: '#fee2e2', border: 'none', cursor: 'pointer', width: '36px', height: '36px', color: '#ef4444', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem' }}
                       title="Excluir Venda"
                     >
-                      🗑️
+                      <IconTrash />
                     </button>
                   )}
                 </div>
