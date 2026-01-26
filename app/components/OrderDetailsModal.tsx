@@ -111,6 +111,24 @@ export function OrderDetailsModal({ orderId, label, onClose, onUpdate, userRole 
     const { error } = await supabase.from('order_items').delete().eq('id', itemId); if (!error) { await loadData(); onUpdate() }
   }
 
+  // --- NOVA FUNÇÃO: ZERAR COMANDA ---
+  const handleClearOrder = async () => {
+    if (items.length === 0) return
+    if (userRole !== 'admin') { alert('🔒 Acesso Negado: Apenas gerentes podem zerar mesas.'); return }
+    
+    // Confirmação Dupla de Segurança
+    if (!confirm('⚠️ ATENÇÃO: ZERAR COMANDA?\n\nIsso apagará TODOS os itens lançados nesta mesa.\nDeseja continuar?')) return;
+    
+    const { error } = await supabase.from('order_items').delete().eq('order_id', orderId);
+    
+    if (error) { 
+        alert('Erro ao zerar: ' + error.message) 
+    } else { 
+        await loadData(); 
+        onUpdate(); 
+    }
+  }
+
   const handlePaymentSelection = (method: string) => { if (method === 'fiado') { setShowClientSelector(true) } else { handleFinishOrder(method, null) } }
 
   const handleFinishOrder = async (method: string, clientId: string | null) => {
@@ -176,8 +194,8 @@ export function OrderDetailsModal({ orderId, label, onClose, onUpdate, userRole 
             </div>
           ) : (
             <>
-              {/* LISTA DE ITENS JÁ LANÇADOS (Topo - Tamanho reduzido em mobile) */}
-              <div className="no-scrollbar" style={{ flexShrink: 0, maxHeight: '25vh', overflowY: 'auto', backgroundColor: '#f8fafc', borderBottom: `1px solid ${colors.border}` }}>
+              {/* LISTA DE ITENS JÁ LANÇADOS */}
+              <div className="no-scrollbar" style={{ flexShrink: 0, maxHeight: '120px', overflowY: 'auto', backgroundColor: '#f8fafc', borderBottom: `1px solid ${colors.border}` }}>
                 {items.length === 0 ? (
                   <div style={{ padding: '15px', textAlign: 'center', color: '#94a3b8', fontSize: '0.9rem' }}>Nenhum item lançado.</div>
                 ) : (
@@ -196,10 +214,8 @@ export function OrderDetailsModal({ orderId, label, onClose, onUpdate, userRole 
                 )}
               </div>
 
-              {/* ÁREA DE PRODUTOS E BUSCA (Flex 1 - Ocupa todo o resto) */}
+              {/* ÁREA DE PRODUTOS */}
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: 'white', minHeight: 0 }}>
-                
-                {/* 1. BUSCA E CATEGORIAS */}
                 <div style={{ padding: '15px', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '10px' }}>
                   {isCustomMode ? (
                       <div style={{ width: '100%', padding: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fff7ed', borderRadius: '12px', color: orangeTheme, fontWeight: 'bold', border: `2px dashed ${orangeTheme}`, fontSize: '1rem' }}>Modo Item Avulso Ativado</div>
@@ -219,7 +235,6 @@ export function OrderDetailsModal({ orderId, label, onClose, onUpdate, userRole 
                   )}
                 </div>
 
-                {/* 2. LISTA DE PRODUTOS SCROLLÁVEL */}
                 <div className="no-scrollbar" style={{ flex: 1, overflowY: 'auto', padding: '0 15px 15px 15px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
                   {isCustomMode ? (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', paddingTop: '10px' }}>
@@ -246,7 +261,7 @@ export function OrderDetailsModal({ orderId, label, onClose, onUpdate, userRole 
                   )}
                 </div>
 
-                {/* 3. RODAPÉ DE AÇÃO (Fixo) */}
+                {/* RODAPÉ */}
                 <div style={{ padding: '15px', background: 'white', borderTop: `1px solid ${colors.border}`, display: 'flex', flexDirection: 'column', gap: '12px', boxShadow: '0 -4px 10px rgba(0,0,0,0.05)', flexShrink: 0 }}>
                     <div style={{ display: 'flex', gap: '12px', height: '55px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '5px', background: '#f1f5f9', borderRadius: '12px', padding: '4px', flex: 0.4 }}>
@@ -258,7 +273,25 @@ export function OrderDetailsModal({ orderId, label, onClose, onUpdate, userRole 
                     </div>
 
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '8px', borderTop: '1px dashed #eee' }}>
-                      <div><span style={{ fontSize: '0.75rem', fontWeight: 800, color: colors.textMuted, textTransform: 'uppercase' }}>TOTAL MESA</span><div style={{ fontSize: '1.6rem', fontWeight: 900, color: colors.primary, lineHeight: 1 }}>R$ {localTotal.toFixed(2)}</div></div>
+                      
+                      {/* LADO ESQUERDO: TOTAL + BOTÃO ZERAR */}
+                      <div>
+                        <span style={{ fontSize: '0.75rem', fontWeight: 800, color: colors.textMuted, textTransform: 'uppercase' }}>TOTAL MESA</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <div style={{ fontSize: '1.3rem', fontWeight: 900, color: colors.primary, lineHeight: 1 }}>R$ {localTotal.toFixed(2)}</div>
+                            {/* BOTÃO ZERAR (SÓ APARECE SE TIVER ITENS) */}
+                            {items.length > 0 && userRole === 'admin' && (
+                                <button 
+                                    onClick={handleClearOrder} 
+                                    style={{ border: 'none', background: '#fee2e2', borderRadius: '6px', width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#ef4444' }}
+                                    title="Zerar Comanda"
+                                >
+                                    <IconTrash />
+                                </button>
+                            )}
+                        </div>
+                      </div>
+
                       <div style={{ display: 'flex', gap: '10px' }}>
                         <button onClick={() => setIsCustomMode(!isCustomMode)} style={{ ...touchBtnBase, width: '55px', border: `2px solid ${isCustomMode ? orangeTheme : '#ccc'}`, background: isCustomMode ? '#fff7ed' : 'white', color: isCustomMode ? orangeTheme : colors.text }} title="Item Avulso"> {isCustomMode ? <IconClose /> : <IconPen />} </button>
                         <button onClick={handlePrint} className="btn-grena-interactive" style={{ ...touchBtnBase, width: '55px' }} title="Imprimir Comanda"><IconPrint /></button>
