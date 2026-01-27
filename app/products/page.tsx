@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabaseClient'
 import { useRouter } from 'next/navigation'
 import { colors, globalStyles } from '../styles/theme'
 import { Header } from '../components/Header'
+import { MenuExportModal } from '../components/MenuExportModal' // <--- NOVO IMPORT
 
 // --- ÍCONES SVG ---
 const IconSearch = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
@@ -13,28 +14,17 @@ const IconEdit = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="non
 const IconTrash = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
 const IconX = () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
 const IconCheck = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+const IconPdf = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
 
 // --- PALETA DE CORES EXPANDIDA (15 CORES VIBRANTES) ---
 const COLOR_PALETTE = [
-  '#ef4444', // Vermelho Vivo
-  '#dc2626', // Vermelho Escuro
-  '#f97316', // Laranja
-  '#ea580c', // Laranja Queimado
-  '#d97706', // Ocre/Amarelo Escuro
-  '#65a30d', // Lima Escuro
-  '#16a34a', // Verde Bandeira
-  '#059669', // Esmeralda
-  '#0d9488', // Verde Petróleo
-  '#0891b2', // Ciano Escuro
-  '#2563eb', // Azul Royal
-  '#4f46e5', // Índigo
-  '#7c3aed', // Roxo
-  '#c026d3', // Fúcsia
-  '#be123c'  // Vinho/Rosa Forte
+  '#ef4444', '#dc2626', '#f97316', '#ea580c', '#d97706', 
+  '#65a30d', '#16a34a', '#059669', '#0d9488', '#0891b2', 
+  '#2563eb', '#4f46e5', '#7c3aed', '#c026d3', '#be123c'
 ]
 
 // Tipos
-type Product = { id: string, name: string, description: string, price: number, category: string, org_id: string }
+type Product = { id: string, name: string, description: string, price: number, category: string, active: boolean, org_id: string }
 type Category = { id: string, name: string, color: string, org_id: string }
 
 export default function ProductsPage() {
@@ -54,6 +44,7 @@ export default function ProductsPage() {
   // Modais
   const [showProductModal, setShowProductModal] = useState(false)
   const [showCategoryModal, setShowCategoryModal] = useState(false)
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false) // <--- ESTADO EXPORTAR
   
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
   const [editingCategory, setEditingCategory] = useState<Category | null>(null) 
@@ -63,23 +54,14 @@ export default function ProductsPage() {
   // Formulários
   const [prodForm, setProdForm] = useState({ name: '', description: '', price: '', category: '' })
   const [catName, setCatName] = useState('')
-  const [catColor, setCatColor] = useState(COLOR_PALETTE[10]) // Azul Royal Padrão
+  const [catColor, setCatColor] = useState(COLOR_PALETTE[10])
 
   // Estilos
   const grenaColor = '#800020'
   const touchBtnStyle = { 
-    padding: '12px 16px', 
-    borderRadius: '12px', 
-    fontWeight: 700, 
-    fontSize: '0.9rem', 
-    cursor: 'pointer', 
-    border: 'none', 
-    minHeight: '48px', 
-    display: 'flex', 
-    alignItems: 'center', 
-    justifyContent: 'center', 
-    gap: '8px', 
-    transition: 'all 0.1s' 
+    padding: '12px 16px', borderRadius: '12px', fontWeight: 700, fontSize: '0.9rem', 
+    cursor: 'pointer', border: 'none', minHeight: '48px', 
+    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', transition: 'all 0.1s' 
   }
 
   useEffect(() => { initPage() }, [])
@@ -133,8 +115,8 @@ export default function ProductsPage() {
 
     if (!prodForm.name || isNaN(priceNumber) || !prodForm.category) { alert('Preencha os campos obrigatórios.'); setSubmitting(false); return }
 
-    const finalName = prodForm.name.trim().toLowerCase()
-    const payload = { name: finalName, description: prodForm.description, price: priceNumber, category: prodForm.category, org_id: myOrgId }
+    const finalName = prodForm.name.trim().toLowerCase() // Nome em minúsculo para busca
+    const payload = { name: finalName, description: prodForm.description, price: priceNumber, category: prodForm.category, org_id: myOrgId, active: true }
 
     try {
         if (editingProduct) {
@@ -213,9 +195,17 @@ export default function ProductsPage() {
             <span style={{ fontSize: '0.85rem', color: colors.textMuted }}>{products.length} itens cadastrados</span>
           </div>
           <div style={{ display: 'flex', gap: '10px' }}>
-            <button onClick={() => setShowCategoryModal(true)} style={{ ...touchBtnStyle, background: 'white', border: `1px solid ${colors.border}`, color: colors.text }}>
-                <IconTag /> <span className="hide-mobile">Categorias</span>
+            {/* BOTÃO CATEGORIAS */}
+            <button onClick={() => setShowCategoryModal(true)} style={{ ...touchBtnStyle, background: 'white', border: `1px solid ${colors.border}`, color: colors.text }} title="Gerenciar Categorias">
+                <IconTag />
             </button>
+            
+            {/* BOTÃO EXPORTAR PDF (NOVO) */}
+            <button onClick={() => setIsExportModalOpen(true)} style={{ ...touchBtnStyle, background: 'white', border: `1px solid ${colors.primary}`, color: colors.primary }} title="Exportar PDF">
+                <IconPdf />
+            </button>
+
+            {/* BOTÃO NOVO PRODUTO */}
             <button onClick={openCreateModal} style={{ ...touchBtnStyle, backgroundColor: grenaColor, color: 'white' }}>
                 <IconPlus /> Novo
             </button>
@@ -361,9 +351,7 @@ export default function ProductsPage() {
                     <span style={{ fontSize: '0.95rem', fontWeight: 600 }}>{cat.name}</span>
                   </div>
                   <div style={{ display: 'flex', gap: '5px' }}>
-                    {/* Botão Editar Categoria */}
                     <button onClick={() => startEditCategory(cat)} style={{ color: '#3b82f6', background: 'none', border: 'none', cursor: 'pointer', padding: '5px' }}><IconEdit /></button>
-                    {/* Botão Excluir Categoria */}
                     <button onClick={() => handleDeleteCategory(cat.id)} style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer', padding: '5px' }}><IconTrash /></button>
                   </div>
                 </div>
@@ -389,7 +377,6 @@ export default function ProductsPage() {
                     </button>
                 </div>
                 
-                {/* SELETOR DE CORES */}
                 <label style={{display: 'block', fontSize: '0.8rem', marginBottom: '8px', color: colors.textMuted}}>Cor da Etiqueta:</label>
                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                     {COLOR_PALETTE.map(color => (
@@ -411,7 +398,14 @@ export default function ProductsPage() {
         </div>
       )}
 
-      {/* CSS para esconder texto em mobile */}
+      {/* MODAL 3: EXPORTAR CARDÁPIO (Novo) */}
+      <MenuExportModal 
+        isOpen={isExportModalOpen}
+        onClose={() => setIsExportModalOpen(false)}
+        categories={categories}
+        products={products}
+      />
+
       <style jsx>{`
         @media (max-width: 600px) {
             .hide-mobile { display: none; }
