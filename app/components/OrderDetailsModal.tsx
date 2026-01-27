@@ -111,22 +111,12 @@ export function OrderDetailsModal({ orderId, label, onClose, onUpdate, userRole 
     const { error } = await supabase.from('order_items').delete().eq('id', itemId); if (!error) { await loadData(); onUpdate() }
   }
 
-  // --- NOVA FUNÇÃO: ZERAR COMANDA ---
   const handleClearOrder = async () => {
     if (items.length === 0) return
     if (userRole !== 'admin') { alert('🔒 Acesso Negado: Apenas gerentes podem zerar mesas.'); return }
-    
-    // Confirmação Dupla de Segurança
     if (!confirm('⚠️ ATENÇÃO: ZERAR COMANDA?\n\nIsso apagará TODOS os itens lançados nesta mesa.\nDeseja continuar?')) return;
-    
     const { error } = await supabase.from('order_items').delete().eq('order_id', orderId);
-    
-    if (error) { 
-        alert('Erro ao zerar: ' + error.message) 
-    } else { 
-        await loadData(); 
-        onUpdate(); 
-    }
+    if (error) { alert('Erro ao zerar: ' + error.message) } else { await loadData(); onUpdate(); }
   }
 
   const handlePaymentSelection = (method: string) => { if (method === 'fiado') { setShowClientSelector(true) } else { handleFinishOrder(method, null) } }
@@ -214,11 +204,16 @@ export function OrderDetailsModal({ orderId, label, onClose, onUpdate, userRole 
                 )}
               </div>
 
-              {/* ÁREA DE PRODUTOS */}
+              {/* ÁREA DE CONTEÚDO (Flexbox centralizado) */}
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: 'white', minHeight: 0 }}>
-                <div style={{ padding: '15px', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                
+                {/* Cabeçalho do Modo Avulso ou Busca */}
+                <div style={{ padding: '15px 15px 5px 15px', flexShrink: 0 }}>
                   {isCustomMode ? (
-                      <div style={{ width: '100%', padding: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fff7ed', borderRadius: '12px', color: orangeTheme, fontWeight: 'bold', border: `2px dashed ${orangeTheme}`, fontSize: '1rem' }}>Modo Item Avulso Ativado</div>
+                      // BANNER COM BOX-SIZING BORDER-BOX (RESOLVIDO)
+                      <div style={{ width: '100%', boxSizing: 'border-box', padding: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fff7ed', borderRadius: '12px', color: orangeTheme, fontWeight: 'bold', border: `2px dashed ${orangeTheme}`, fontSize: '0.9rem', textTransform: 'uppercase' }}>
+                          ✍️ Modo Item Avulso
+                      </div>
                   ) : (
                       <div style={{ position: 'relative', width: '100%' }}>
                           <span style={{ position: 'absolute', left: '15px', top: '50%', transform: 'translateY(-50%)', opacity: 0.5, fontSize: '1.2rem' }}>🔍</span>
@@ -226,7 +221,7 @@ export function OrderDetailsModal({ orderId, label, onClose, onUpdate, userRole 
                       </div>
                   )}
                   {!isCustomMode && (
-                      <div ref={categoriesRef} className="no-scrollbar" style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '5px' }}>
+                      <div ref={categoriesRef} className="no-scrollbar" style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingTop: '10px', paddingBottom: '5px' }}>
                         <button onClick={() => setSelectedCategory('TODAS')} style={{ padding: '8px 14px', borderRadius: '20px', border: 'none', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 700, background: selectedCategory === 'TODAS' ? colors.text : '#f1f5f9', color: selectedCategory === 'TODAS' ? 'white' : colors.textMuted, whiteSpace: 'nowrap' }}>TODAS</button>
                         {categories.map(cat => (
                           <button key={cat.id} onClick={() => setSelectedCategory(cat.name)} style={{ padding: '8px 14px', borderRadius: '20px', border: 'none', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 700, background: selectedCategory === cat.name ? cat.color : '#f1f5f9', color: selectedCategory === cat.name ? 'white' : colors.textMuted, whiteSpace: 'nowrap' }}>{cat.name}</button>
@@ -235,15 +230,35 @@ export function OrderDetailsModal({ orderId, label, onClose, onUpdate, userRole 
                   )}
                 </div>
 
-                <div className="no-scrollbar" style={{ flex: 1, overflowY: 'auto', padding: '0 15px 15px 15px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {/* ÁREA DE SCROLL (Inputs ou Lista) */}
+                <div className="no-scrollbar" style={{ flex: 1, overflowY: 'auto', padding: '0 15px 15px 15px', display: 'flex', flexDirection: 'column' }}>
                   {isCustomMode ? (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', paddingTop: '10px' }}>
-                          <input autoFocus placeholder="Nome do Item (Ex: Rolha, Taxa...)" value={customName} onChange={e => setCustomName(e.target.value)} style={{ width: '100%', height: '55px', padding: '0 15px', borderRadius: '12px', border: `2px solid ${colors.border}`, fontSize: '1.1rem' }} />
-                          <input type="number" placeholder="Preço (R$)" value={customPrice} onChange={e => setCustomPrice(e.target.value)} style={{ width: '100%', height: '55px', padding: '0 15px', borderRadius: '12px', border: `2px solid ${colors.border}`, fontSize: '1.1rem' }} />
-                          <p style={{ fontSize: '0.8rem', color: colors.textMuted, textAlign: 'center', margin: 0 }}>Este item será adicionado apenas nesta comanda.</p>
+                      // MODO AVULSO CENTRALIZADO E SEGURO
+                      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: '25px', padding: '0 10px' }}>
+                          <div>
+                              <label style={{ display: 'block', marginBottom: '8px', fontWeight: 800, color: colors.textMuted, fontSize: '0.75rem', textTransform: 'uppercase', textAlign: 'center', letterSpacing: '1px' }}>Nome do Item</label>
+                              <input 
+                                autoFocus 
+                                placeholder="Ex: Taxa de Rolha" 
+                                value={customName} 
+                                onChange={e => setCustomName(e.target.value)} 
+                                style={{ width: '100%', boxSizing: 'border-box', height: '55px', padding: '0 15px', borderRadius: '12px', border: `2px solid ${colors.border}`, fontSize: '1.2rem', textAlign: 'center', fontWeight: 600, color: colors.text }} 
+                              />
+                          </div>
+                          <div>
+                              <label style={{ display: 'block', marginBottom: '8px', fontWeight: 800, color: colors.textMuted, fontSize: '0.75rem', textTransform: 'uppercase', textAlign: 'center', letterSpacing: '1px' }}>Preço (R$)</label>
+                              <input 
+                                type="number" 
+                                placeholder="0.00" 
+                                value={customPrice} 
+                                onChange={e => setCustomPrice(e.target.value)} 
+                                style={{ width: '100%', boxSizing: 'border-box', height: '60px', padding: '0 15px', borderRadius: '12px', border: `2px solid ${colors.border}`, fontSize: '2rem', fontWeight: '900', textAlign: 'center', color: colors.primary }} 
+                              />
+                          </div>
                       </div>
                   ) : (
-                      <>
+                      // LISTA DE PRODUTOS
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', paddingTop: '10px' }}>
                         {filteredProducts.map(p => {
                             const isSelected = selectedProductId === p.id
                             return (
@@ -257,35 +272,39 @@ export function OrderDetailsModal({ orderId, label, onClose, onUpdate, userRole 
                             )
                         })}
                         {filteredProducts.length === 0 && <div style={{ textAlign: 'center', padding: '20px', color: colors.textMuted, opacity: 0.7, fontSize: '0.9rem' }}>Nenhum produto encontrado.</div>}
-                      </>
+                      </div>
                   )}
                 </div>
 
-                {/* RODAPÉ */}
+                {/* 3. RODAPÉ DE AÇÃO (Fixo) */}
                 <div style={{ padding: '15px', background: 'white', borderTop: `1px solid ${colors.border}`, display: 'flex', flexDirection: 'column', gap: '12px', boxShadow: '0 -4px 10px rgba(0,0,0,0.05)', flexShrink: 0 }}>
-                    <div style={{ display: 'flex', gap: '12px', height: '55px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '5px', background: '#f1f5f9', borderRadius: '12px', padding: '4px', flex: 0.4 }}>
+                    <div style={{ display: 'flex', gap: '10px', height: '55px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '5px', background: '#f1f5f9', borderRadius: '12px', padding: '4px', flex: '0 0 110px' }}>
                         <button onClick={() => setQuantity(Math.max(1, quantity - 1))} style={{...qtyBtnStyle}}>-</button>
-                        <span style={{ fontWeight: 900, fontSize: '1.3rem', width: '35px', textAlign: 'center' }}>{quantity}</span>
+                        <span style={{ fontWeight: 900, fontSize: '1.3rem', width: '30px', textAlign: 'center' }}>{quantity}</span>
                         <button onClick={() => setQuantity(quantity + 1)} style={{...qtyBtnStyle}}>+</button>
                       </div>
-                      <button onClick={handleAddItem} disabled={!isCustomMode && !selectedProductId} style={{ ...touchBtnBase, flex: 1, backgroundColor: (!isCustomMode && !selectedProductId) ? '#e2e8f0' : colors.primary, color: (!isCustomMode && !selectedProductId) ? '#94a3b8' : 'white', fontSize: '1rem', textTransform: 'uppercase' }}>{isCustomMode ? 'ADICIONAR AVULSO' : (selectedProductId ? 'ADICIONAR ITEM' : 'SELECIONE...')}</button>
+                      
+                      <button 
+                        onClick={() => setIsCustomMode(!isCustomMode)} 
+                        style={{ ...touchBtnBase, width: '55px', border: `2px solid ${isCustomMode ? orangeTheme : '#ccc'}`, background: isCustomMode ? '#fff7ed' : 'white', color: isCustomMode ? orangeTheme : colors.text }} 
+                        title="Item Avulso"
+                      > 
+                        {isCustomMode ? <IconClose /> : <IconPen />} 
+                      </button>
+
+                      <button onClick={handleAddItem} disabled={!isCustomMode && !selectedProductId} style={{ ...touchBtnBase, flex: 1, backgroundColor: (!isCustomMode && !selectedProductId) ? '#e2e8f0' : colors.primary, color: (!isCustomMode && !selectedProductId) ? '#94a3b8' : 'white', fontSize: '1rem', textTransform: 'uppercase' }}>
+                        {isCustomMode ? 'Lançar' : 'Adicionar'}
+                      </button>
                     </div>
 
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '8px', borderTop: '1px dashed #eee' }}>
-                      
-                      {/* LADO ESQUERDO: TOTAL + BOTÃO ZERAR */}
                       <div>
-                        <span style={{ fontSize: '0.75rem', fontWeight: 800, color: colors.textMuted, textTransform: 'uppercase' }}>TOTAL MESA</span>
+                        <span style={{ fontSize: '0.75rem', fontWeight: 800, color: colors.textMuted, textTransform: 'uppercase' }}>TOTAL</span>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                             <div style={{ fontSize: '1.3rem', fontWeight: 900, color: colors.primary, lineHeight: 1 }}>R$ {localTotal.toFixed(2)}</div>
-                            {/* BOTÃO ZERAR (SÓ APARECE SE TIVER ITENS) */}
                             {items.length > 0 && userRole === 'admin' && (
-                                <button 
-                                    onClick={handleClearOrder} 
-                                    style={{ border: 'none', background: '#fee2e2', borderRadius: '6px', width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#ef4444' }}
-                                    title="Zerar Comanda"
-                                >
+                                <button onClick={handleClearOrder} style={{ border: 'none', background: '#fee2e2', borderRadius: '6px', width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#ef4444' }} title="Zerar Comanda">
                                     <IconTrash />
                                 </button>
                             )}
@@ -293,7 +312,6 @@ export function OrderDetailsModal({ orderId, label, onClose, onUpdate, userRole 
                       </div>
 
                       <div style={{ display: 'flex', gap: '10px' }}>
-                        <button onClick={() => setIsCustomMode(!isCustomMode)} style={{ ...touchBtnBase, width: '55px', border: `2px solid ${isCustomMode ? orangeTheme : '#ccc'}`, background: isCustomMode ? '#fff7ed' : 'white', color: isCustomMode ? orangeTheme : colors.text }} title="Item Avulso"> {isCustomMode ? <IconClose /> : <IconPen />} </button>
                         <button onClick={handlePrint} className="btn-grena-interactive" style={{ ...touchBtnBase, width: '55px' }} title="Imprimir Comanda"><IconPrint /></button>
                         <button onClick={() => setIsPaymentStep(true)} disabled={items.length === 0} style={{ ...touchBtnBase, padding: '0 20px', background: items.length > 0 ? '#16a34a' : '#cbd5e1', color: 'white' }}>FECHAR ($)</button>
                       </div>
