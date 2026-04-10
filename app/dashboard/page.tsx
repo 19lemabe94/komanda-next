@@ -80,43 +80,49 @@ export default function Dashboard() {
     const { error } = await supabase.from('orders').delete().eq('id', id)
     if (!error) setOrders(current => current.filter(order => order.id !== id))
   }
-
-  // --- AQUI ESTÁ A CORREÇÃO DO ERRO DA MESA 1 ---
   const handleCreateOrder = async (e: FormEvent) => {
     e.preventDefault()
     if (!newLabel.trim() || !myOrgId) return
     setCreating(true)
     setFeedback('')
-    
+
     const labelFinal = newLabel.trim().toLowerCase()
-    
-    // 1. Verifica se já está na tela
+
     const exists = orders.find(o => o.label.toLowerCase() === labelFinal)
-    if (exists) { 
-        setFeedback(`Mesa "${labelFinal}" já está aberta!`)
-        setCreating(false)
-        return 
+    if (exists) {
+      setFeedback(`Mesa "${labelFinal}" já está aberta!`)
+      setCreating(false)
+      return
     }
 
-    // 2. Tenta criar no banco
     const { error } = await supabase.from('orders').insert([{ label: labelFinal, status: 'aberta', org_id: myOrgId }])
-    
-    // 3. Se der erro (ex: mesa já usada anteriormente e está no histórico)
+
     if (error) {
-        if (error.code === '23505') { // Erro de duplicidade
-            setFeedback(`Nome "${labelFinal}" indisponível (já usada no histórico).`)
-        } else {
-            setFeedback('Erro ao criar mesa.')
-        }
-        setCreating(false)
-        return
+      if (error.code === '23505') {
+        setFeedback(`Nome "${labelFinal}" indisponível (já usada no histórico).`)
+      } else {
+        setFeedback('Erro ao criar mesa.')
+      }
+      setCreating(false)
+      return
     }
 
-    // Sucesso
+    const { data: newOrder } = await supabase
+      .from('orders')
+      .select('*')
+      .eq('org_id', myOrgId)
+      .eq('label', labelFinal)
+      .eq('status', 'aberta')
+      .single()
+
     setIsCreateModalOpen(false)
     setNewLabel('')
-    fetchOrders(myOrgId)
     setCreating(false)
+    fetchOrders(myOrgId)
+
+    if (newOrder) {
+      setSelectedOrder(newOrder)
+    }
   }
 
   if (loading) return null

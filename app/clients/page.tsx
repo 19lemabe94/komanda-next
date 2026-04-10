@@ -106,6 +106,35 @@ export default function ClientsPage() {
       else fetchClients(myOrgId!)
   }
 
+    const handleDeleteClientWithHistory = async (client: Client) => {
+    if (!confirm(`⚠️ ATENÇÃO!\n\nIsso vai apagar TODO o histórico de "${client.name}" (compras e pagamentos) e depois excluir o cliente.\n\nEsta ação é IRREVERSÍVEL. Confirma?`)) return
+
+    // 1. Apaga os pagamentos do cliente
+    await supabase.from('debt_payments').delete().eq('client_id', client.id)
+
+    // 2. Apaga as order_items das orders fiado do cliente
+    const { data: clientOrders } = await supabase
+      .from('orders')
+      .select('id')
+      .eq('client_id', client.id)
+
+    if (clientOrders && clientOrders.length > 0) {
+      const orderIds = clientOrders.map(o => o.id)
+      await supabase.from('order_items').delete().in('order_id', orderIds)
+      await supabase.from('orders').delete().in('id', orderIds)
+    }
+
+    // 3. Agora sim apaga o cliente
+    const { error } = await supabase.from('clients').delete().eq('id', client.id)
+
+    if (error) {
+      alert('Erro ao excluir: ' + error.message)
+    } else {
+      setShowStatementModal(null)
+      fetchClients(myOrgId!)
+    }
+  }
+
   const handleShareWhatsapp = async (client: Client) => {
     const phone = client.phone?.replace(/\D/g, '')
     if (!phone || phone.length < 8) return alert('Telefone inválido para WhatsApp.')
@@ -203,7 +232,6 @@ export default function ClientsPage() {
                     <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
                         <div><span style={{ fontWeight: 800, fontSize: '1.2rem', color: colors.text, display: 'block' }}>{client.name}</span><span style={{ fontSize: '0.9rem', color: colors.textMuted }}>{client.phone || 'Sem telefone'}</span></div>
                         <button className="btn-grena-interactive" onClick={() => openClientModal(client)} style={{ borderRadius: '50%', width: '40px', height: '40px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Editar"><IconEdit /></button>
-                        <button onClick={() => handleDeleteClient(client.id)} style={{ background: '#fee2e2', border: 'none', borderRadius: '50%', width: '40px', height: '40px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ef4444' }} title="Excluir"><IconTrash /></button>
                     </div>
                     <div style={{ textAlign: 'right' }}>
                         <div style={{ fontSize: '0.75rem', color: colors.textMuted, fontWeight: 700 }}>{client.balance < -0.01 ? 'CRÉDITO' : 'DEVE'}</div>
@@ -268,14 +296,22 @@ export default function ClientsPage() {
                     </div>
                 ))}
             </div>
-            <div style={{padding:'15px', borderTop:'1px solid #eee', display:'flex', gap:'10px'}}>
-                <button onClick={handlePrintStatement} style={{...touchBtnStyle, flex:1, background:'#fff', border:'1px solid #ccc', display:'flex', alignItems:'center', justifyContent:'center', gap:'8px'}}>
-                    <IconPrint /> Imprimir
-                </button>
-                <button onClick={()=>setShowStatementModal(null)} style={{...touchBtnStyle, flex:1, background:'#eee'}}>Fechar</button>
-                {showStatementModal.balance > 0.01 && (
-                    <button onClick={() => { setShowStatementModal(null); openPayModal(showStatementModal) }} style={{ ...touchBtnStyle, flex: 1, background: grenaColor, color: 'white' }}>QUITAR</button>
-                )}
+            {/* RODAPÉ DO MODAL EXTRATO - substitua o div dos botões por este: */}
+            <div style={{padding:'15px', borderTop:'1px solid #eee', display:'flex', gap:'10px', flexWrap:'wrap'}}>
+              <button onClick={handlePrintStatement} style={{...touchBtnStyle, flex:1, background:'#fff', border:'1px solid #ccc', display:'flex', alignItems:'center', justifyContent:'center', gap:'8px'}}>
+                <IconPrint /> Imprimir
+              </button>
+              <button onClick={()=>setShowStatementModal(null)} style={{...touchBtnStyle, flex:1, background:'#eee'}}>Fechar</button>
+              {showStatementModal.balance > 0.01 && (
+                <button onClick={() => { setShowStatementModal(null); openPayModal(showStatementModal) }} style={{ ...touchBtnStyle, flex: 1, background: grenaColor, color: 'white' }}>QUITAR</button>
+              )}
+              {/* 🆕 BOTÃO NOVO - Excluir com histórico */}
+              <button
+                onClick={() => handleDeleteClientWithHistory(showStatementModal)}
+                style={{ ...touchBtnStyle, width: '100%', background: '#fee2e2', color: '#dc2626', border: '1px solid #fca5a5' }}
+              >
+                🗑️ Excluir Cliente e Todo o Histórico
+              </button>
             </div>
           </div>
         </div>
