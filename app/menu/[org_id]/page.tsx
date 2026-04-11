@@ -65,13 +65,22 @@ export default function MenuPage() {
       .eq('org_id', org_id)
       .single()
 
+    const { data: categoriesData } = await supabase
+      .from('categories')
+      .select('name, available')
+      .eq('org_id', org_id)
+
+    const availableCategoryNames = (categoriesData || [])
+      .filter(c => c.available !== false)
+      .map(c => c.name)
+
     const { data: productsData } = await supabase
       .from('products')
       .select('*')
       .eq('org_id', org_id)
       .eq('available', true)
+      .in('category', availableCategoryNames.length > 0 ? availableCategoryNames : ['__none__'])
       .order('category')
-
     if (configData) setConfig(configData)
     if (productsData) setProducts(productsData)
     setLoading(false)

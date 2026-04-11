@@ -24,7 +24,7 @@ const COLOR_PALETTE = [
 ]
 
 type Product = { id: string, name: string, description: string, price: number, category: string, active: boolean, org_id: string, image_url?: string, available?: boolean }
-type Category = { id: string, name: string, color: string, org_id: string }
+type Category = { id: string, name: string, color: string, org_id: string, available: boolean }
 
 export default function ProductsPage() {
   const router = useRouter()
@@ -261,6 +261,11 @@ export default function ProductsPage() {
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
                       <span style={{ fontWeight: 800, color: colors.text, fontSize: '1rem', textTransform: 'capitalize' }}>{item.name}</span>
                       <span style={{ fontSize: '0.65rem', padding: '3px 8px', borderRadius: '12px', backgroundColor: getCategoryColor(item.category), color: 'white', fontWeight: 'bold', textTransform: 'uppercase' }}>{item.category}</span>
+                      {categories.find(c => c.name === item.category)?.available === false && (
+  <span style={{ fontSize: '0.65rem', padding: '3px 8px', borderRadius: '12px', background: '#fef3c7', color: '#d97706', fontWeight: 800 }}>
+    CAT. OCULTA
+  </span>
+)}
                       {item.available === false && <span style={{ fontSize: '0.65rem', padding: '3px 8px', borderRadius: '12px', backgroundColor: '#fee2e2', color: '#ef4444', fontWeight: 'bold' }}>INDISPONÍVEL</span>}
                     </div>
                     {item.description && <p style={{ margin: '0 0 4px', fontSize: '0.8rem', color: colors.textMuted }}>{item.description}</p>}
@@ -375,6 +380,22 @@ export default function ProductsPage() {
                     <span style={{ fontSize: '0.95rem', fontWeight: 600 }}>{cat.name}</span>
                   </div>
                   <div style={{ display: 'flex', gap: '5px' }}>
+                    <button
+  onClick={async () => {
+    const newVal = !cat.available
+    await supabase.from('categories').update({ available: newVal }).eq('id', cat.id)
+    if (myOrgId) fetchData(myOrgId)
+  }}
+  style={{
+    fontSize: '0.7rem', fontWeight: 800, padding: '3px 8px', borderRadius: '8px', border: 'none',
+    cursor: 'pointer',
+    background: cat.available !== false ? '#dcfce7' : '#fee2e2',
+    color: cat.available !== false ? '#16a34a' : '#ef4444'
+  }}
+  title="Disponível no cardápio"
+>
+  {cat.available !== false ? '✅' : '❌'}
+</button>
                     <button onClick={() => startEditCategory(cat)} style={{ color: '#3b82f6', background: 'none', border: 'none', cursor: 'pointer', padding: '5px' }}><IconEdit /></button>
                     <button onClick={() => handleDeleteCategory(cat.id)} style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer', padding: '5px' }}><IconTrash /></button>
                   </div>
