@@ -66,20 +66,33 @@ export default function MenuConfigPage() {
     if (!file || !orgId) return
     setLogoUploading(true)
 
-    const ext = file.name.split('.').pop()
-    const path = `logos/${orgId}.${ext}`
+    // Sempre salva com o mesmo nome fixo para garantir substituição
+    const path = `logos/${orgId}/logo`
+
+    // Remove o arquivo antigo antes de fazer upload
+    await supabase.storage.from('product-images').remove([path])
 
     const { error } = await supabase.storage
       .from('product-images')
-      .upload(path, file, { upsert: true })
+      .upload(path, file, { upsert: true, contentType: file.type })
 
     if (!error) {
       const { data: urlData } = supabase.storage
         .from('product-images')
         .getPublicUrl(path)
-      setForm(f => ({ ...f, logo_url: urlData.publicUrl }))
+
+      // Adiciona timestamp para forçar o navegador a não usar cache
+      const urlWithCache = `${urlData.publicUrl}?t=${Date.now()}`
+      setForm(f => ({ ...f, logo_url: urlWithCache }))
+    } else {
+      alert('Erro no upload: ' + error.message)
     }
     setLogoUploading(false)
+  }
+
+  const handleRemoveLogo = () => {
+    if (!confirm('Remover o logo do cardápio?')) return
+    setForm(f => ({ ...f, logo_url: '' }))
   }
 
   const handleSave = async (e: FormEvent) => {
@@ -87,16 +100,31 @@ export default function MenuConfigPage() {
     if (!orgId) return
     setSaving(true)
 
-    await supabase.from('menu_config').upsert({
+    const { error } = await supabase.from('menu_config').upsert({
       org_id: orgId,
       ...form,
       updated_at: new Date().toISOString()
     }, { onConflict: 'org_id' })
 
-    setSaved(true)
-    setTimeout(() => setSaved(false), 3000)
-    setSaving(false)
-  }
+    if (error) {
+      alert('Erro ao salvar: ' + error.message)
+      setSaving(false)
+      return
+    }
+
+  // Confirma o que foi salvo no banco
+  const { data: check } = await supabase
+    .from('menu_config')
+    .select('logo_url')
+    .eq('org_id', orgId)
+    .single()
+
+  console.log('Logo salva no banco:', check?.logo_url)
+
+  setSaved(true)
+  setTimeout(() => setSaved(false), 3000)
+  setSaving(false)
+}
 
   const menuUrl = `${typeof window !== 'undefined' ? window.location.origin : ''}/menu/${orgId}`
 
@@ -136,15 +164,35 @@ export default function MenuConfigPage() {
 
           {/* LOGO */}
           <div style={{ marginBottom: '20px', textAlign: 'center' }}>
-            {form.logo_url && (
-              <img src={form.logo_url} alt="Logo" style={{ width: '100px', height: '100px', objectFit: 'cover', borderRadius: '50%', marginBottom: '10px', border: `3px solid ${form.primary_color}` }} />
-            )}
-            <div>
-              <label style={{ display: 'inline-block', padding: '10px 20px', background: '#f1f5f9', border: `1px solid ${colors.border}`, borderRadius: '10px', cursor: 'pointer', fontWeight: 700, fontSize: '0.9rem' }}>
-                {logoUploading ? 'Enviando...' : '📷 Upload do Logo'}
-                <input type="file" accept="image/*" onChange={handleLogoUpload} style={{ display: 'none' }} />
+            {form.logo_url ? (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
+                <div style={{ position: 'relative', display: 'inline-block' }}>
+                  <img
+                    src={form.logo_url}
+                    alt="Logo"
+                    style={{ width: '100px', height: '100px', objectFit: 'cover', borderRadius: '50%', border: `3px solid ${form.primary_color}` }}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleRemoveLogo}
+                    style={{ position: 'absolute', top: '-5px', right: '-5px', background: '#ef4444', color: 'white', border: 'none', borderRadius: '50%', width: '26px', height: '26px', cursor: 'pointer', fontWeight: 900, fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 5px rgba(0,0,0,0.2)' }}
+                    title="Remover logo"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <label style={{ display: 'inline-block', padding: '8px 18px', background: '#f1f5f9', border: `1px solid ${colors.border}`, borderRadius: '10px', cursor: 'pointer', fontWeight: 700, fontSize: '0.85rem' }}>
+                  {logoUploading ? 'Enviando...' : '🔄 Trocar Logo'}
+                  <input type="file" accept="image/*" onChange={handleLogoUpload} style={{ display: 'none' }} disabled={logoUploading} />
+                </label>
+              </div>
+            ) : (
+              <label style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: '120px', height: '120px', border: `2px dashed ${colors.border}`, borderRadius: '50%', cursor: 'pointer', color: colors.textMuted, background: '#f8fafc', gap: '8px' }}>
+                <span style={{ fontSize: '2rem' }}>📷</span>
+                <span style={{ fontSize: '0.7rem', fontWeight: 700, textAlign: 'center' }}>{logoUploading ? 'Enviando...' : 'Upload do Logo'}</span>
+                <input type="file" accept="image/*" onChange={handleLogoUpload} style={{ display: 'none' }} disabled={logoUploading} />
               </label>
-            </div>
+            )}
           </div>
 
           {[

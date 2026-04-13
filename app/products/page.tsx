@@ -23,7 +23,11 @@ const COLOR_PALETTE = [
   '#2563eb', '#4f46e5', '#7c3aed', '#c026d3', '#be123c'
 ]
 
-type Product = { id: string, name: string, description: string, price: number, category: string, active: boolean, org_id: string, image_url?: string, available?: boolean }
+type Product = {
+  id: string, name: string, description: string, price: number,
+  category: string, active: boolean, available: boolean,
+  org_id: string, image_url?: string
+}
 type Category = { id: string, name: string, color: string, org_id: string, available: boolean }
 
 export default function ProductsPage() {
@@ -32,9 +36,11 @@ export default function ProductsPage() {
   const [myOrgId, setMyOrgId] = useState<string | null>(null)
   const [userRole, setUserRole] = useState<string | null>(null)
   const [products, setProducts] = useState<Product[]>([])
+  const [allProducts, setAllProducts] = useState<Product[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('TODAS')
+  const [showInactive, setShowInactive] = useState(false)
   const [showProductModal, setShowProductModal] = useState(false)
   const [showCategoryModal, setShowCategoryModal] = useState(false)
   const [isExportModalOpen, setIsExportModalOpen] = useState(false)
@@ -59,6 +65,14 @@ export default function ProductsPage() {
 
   useEffect(() => { initPage() }, [])
 
+  useEffect(() => {
+    if (showInactive) {
+      setProducts(allProducts)
+    } else {
+      setProducts(allProducts.filter(p => p.available !== false && p.active !== false))
+    }
+  }, [showInactive, allProducts])
+
   const initPage = async () => {
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) { router.push('/login'); return }
@@ -73,8 +87,10 @@ export default function ProductsPage() {
   const fetchData = async (orgId: string) => {
     const { data: catData } = await supabase.from('categories').select('*').eq('org_id', orgId).order('name')
     if (catData) setCategories(catData)
+
     const { data: prodData } = await supabase.from('products').select('*').eq('org_id', orgId).order('name')
-    if (prodData) setProducts(prodData || [])
+    if (prodData) setAllProducts(prodData)
+
     setLoading(false)
   }
 
@@ -103,23 +119,15 @@ export default function ProductsPage() {
     setShowProductModal(true)
   }
 
-  // --- UPLOAD DE IMAGEM ---
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file || !myOrgId) return
     setImageUploading(true)
-
     const ext = file.name.split('.').pop()
     const path = `products/${myOrgId}/${Date.now()}.${ext}`
-
-    const { error } = await supabase.storage
-      .from('product-images')
-      .upload(path, file, { upsert: true })
-
+    const { error } = await supabase.storage.from('product-images').upload(path, file, { upsert: true })
     if (!error) {
-      const { data: urlData } = supabase.storage
-        .from('product-images')
-        .getPublicUrl(path)
+      const { data: urlData } = supabase.storage.from('product-images').getPublicUrl(path)
       setProdForm(f => ({ ...f, image_url: urlData.publicUrl }))
     } else {
       alert('Erro ao fazer upload: ' + error.message)
@@ -131,14 +139,12 @@ export default function ProductsPage() {
     e.preventDefault()
     if (!myOrgId) return
     setSubmitting(true)
-
     const priceNumber = parseFloat(prodForm.price.replace(',', '.'))
     if (!prodForm.name || isNaN(priceNumber) || !prodForm.category) {
       alert('Preencha os campos obrigatórios.')
       setSubmitting(false)
       return
     }
-
     const payload = {
       name: prodForm.name.trim().toLowerCase(),
       description: prodForm.description,
@@ -149,7 +155,6 @@ export default function ProductsPage() {
       org_id: myOrgId,
       active: true
     }
-
     try {
       if (editingProduct) {
         const { error } = await supabase.from('products').update(payload).eq('id', editingProduct.id)
@@ -167,16 +172,23 @@ export default function ProductsPage() {
     }
   }
 
-  const handleDeleteProduct = async (id: string, name: string) => {
-    if (!confirm(`Excluir "${name}"?`)) return
-    await supabase.from('products').delete().eq('id', id)
-    setProducts(prev => prev.filter(p => p.id !== id))
+  const handleDeactivateProduct = async (id: string, name: string) => {
+    if (!confirm(`Desativar "${name}"?\n\nO produto será ocultado do cardápio mas o histórico de vendas será preservado.`)) return
+    const { error } = await supabase.from('products').update({ available: false, active: false }).eq('id', id)
+    if (error) { alert('Erro: ' + error.message); return }
+    fetchData(myOrgId!)
+  }
+
+  const handleReactivateProduct = async (id: string) => {
+    const { error } = await supabase.from('products').update({ available: true, active: true }).eq('id', id)
+    if (error) { alert('Erro: ' + error.message); return }
+    fetchData(myOrgId!)
   }
 
   const handleToggleAvailable = async (product: Product) => {
     const newVal = !product.available
     await supabase.from('products').update({ available: newVal }).eq('id', product.id)
-    setProducts(prev => prev.map(p => p.id === product.id ? { ...p, available: newVal } : p))
+    fetchData(myOrgId!)
   }
 
   const startEditCategory = (cat: Category) => { setEditingCategory(cat); setCatName(cat.name); setCatColor(cat.color) }
@@ -202,6 +214,7 @@ export default function ProductsPage() {
   }
 
   const getCategoryColor = (catName: string) => categories.find(c => c.name === catName)?.color || '#94a3b8'
+  const isCategoryAvailable = (catName: string) => categories.find(c => c.name === catName)?.available !== false
 
   return (
     <div style={{ ...globalStyles.container, justifyContent: 'flex-start', background: '#f8fafc' }}>
@@ -210,12 +223,16 @@ export default function ProductsPage() {
       <main style={{ width: '100%', maxWidth: '900px', padding: '20px', flex: 1, display: 'flex', flexDirection: 'column' }}>
 
         {/* TOPO */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
           <div>
             <h2 style={{ fontSize: '1.3rem', color: colors.text, margin: 0 }}>Gerenciar Produtos</h2>
-            <span style={{ fontSize: '0.85rem', color: colors.textMuted }}>{products.length} itens cadastrados</span>
+            <span style={{ fontSize: '0.85rem', color: colors.textMuted }}>{allProducts.filter(p => p.available !== false && p.active !== false).length} ativos · {allProducts.filter(p => p.available === false || p.active === false).length} inativos</span>
           </div>
-          <div style={{ display: 'flex', gap: '10px' }}>
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+            <button onClick={() => setShowInactive(!showInactive)}
+              style={{ ...touchBtnStyle, background: showInactive ? '#fef3c7' : 'white', border: `1px solid ${showInactive ? '#d97706' : colors.border}`, color: showInactive ? '#d97706' : colors.textMuted }}>
+              {showInactive ? '🙈 Ocultar inativos' : '👁️ Ver inativos'}
+            </button>
             <button onClick={() => setShowCategoryModal(true)} style={{ ...touchBtnStyle, background: 'white', border: `1px solid ${colors.border}`, color: colors.text }}><IconTag /></button>
             <button onClick={() => setIsExportModalOpen(true)} style={{ ...touchBtnStyle, background: 'white', border: `1px solid ${colors.primary}`, color: colors.primary }}><IconPdf /></button>
             <button onClick={openCreateModal} style={{ ...touchBtnStyle, backgroundColor: grenaColor, color: 'white' }}><IconPlus /> Novo</button>
@@ -232,13 +249,14 @@ export default function ProductsPage() {
 
         {/* FILTROS */}
         <div className="no-scrollbar" style={{ display: 'flex', gap: '10px', overflowX: 'auto', paddingBottom: '10px', marginBottom: '15px' }}>
-          <button onClick={() => setSelectedCategory('TODAS')} style={{ padding: '10px 20px', borderRadius: '25px', cursor: 'pointer', whiteSpace: 'nowrap', fontWeight: 800, fontSize: '0.8rem', backgroundColor: selectedCategory === 'TODAS' ? colors.text : 'white', color: selectedCategory === 'TODAS' ? 'white' : colors.textMuted, border: selectedCategory === 'TODAS' ? 'none' : `1px solid ${colors.border}` }}>
+          <button onClick={() => setSelectedCategory('TODAS')}
+            style={{ padding: '10px 20px', borderRadius: '25px', cursor: 'pointer', whiteSpace: 'nowrap', fontWeight: 800, fontSize: '0.8rem', backgroundColor: selectedCategory === 'TODAS' ? colors.text : 'white', color: selectedCategory === 'TODAS' ? 'white' : colors.textMuted, border: selectedCategory === 'TODAS' ? 'none' : `1px solid ${colors.border}` }}>
             TODAS
           </button>
           {categories.map(cat => (
             <button key={cat.id} onClick={() => setSelectedCategory(cat.name)}
-              style={{ padding: '10px 20px', borderRadius: '25px', cursor: 'pointer', whiteSpace: 'nowrap', fontWeight: 800, fontSize: '0.8rem', backgroundColor: selectedCategory === cat.name ? cat.color : 'white', color: selectedCategory === cat.name ? 'white' : colors.text, border: selectedCategory === cat.name ? 'none' : `1px solid ${colors.border}`, transition: 'all 0.2s' }}>
-              {cat.name}
+              style={{ padding: '10px 20px', borderRadius: '25px', cursor: 'pointer', whiteSpace: 'nowrap', fontWeight: 800, fontSize: '0.8rem', backgroundColor: selectedCategory === cat.name ? cat.color : 'white', color: selectedCategory === cat.name ? 'white' : colors.text, border: selectedCategory === cat.name ? 'none' : `1px solid ${colors.border}`, opacity: cat.available === false ? 0.5 : 1 }}>
+              {cat.name} {cat.available === false ? '🚫' : ''}
             </button>
           ))}
         </div>
@@ -246,50 +264,71 @@ export default function ProductsPage() {
         {/* LISTA */}
         {loading ? <p style={{ textAlign: 'center', color: colors.textMuted, marginTop: '40px' }}>Carregando...</p> : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', overflowY: 'auto', paddingBottom: '30px' }}>
-            {filteredProducts.map(item => (
-              <div key={item.id} style={{ backgroundColor: 'white', borderRadius: '16px', border: `1px solid ${colors.border}`, display: 'flex', overflow: 'hidden', boxShadow: '0 2px 6px rgba(0,0,0,0.03)', opacity: item.available === false ? 0.6 : 1 }}>
+            {filteredProducts.map(item => {
+              const isInactive = item.available === false || item.active === false
+              return (
+                <div key={item.id} style={{ backgroundColor: 'white', borderRadius: '16px', border: `1px solid ${isInactive ? '#fecdd3' : colors.border}`, display: 'flex', overflow: 'hidden', boxShadow: '0 2px 6px rgba(0,0,0,0.03)', opacity: isInactive ? 0.65 : 1 }}>
 
-                {/* FOTO */}
-                {item.image_url ? (
-                  <img src={item.image_url} alt={item.name} style={{ width: '90px', height: '90px', objectFit: 'cover', flexShrink: 0 }} />
-                ) : (
-                  <div style={{ width: '90px', height: '90px', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: '1.8rem' }}>🍽️</div>
-                )}
+                  {/* FOTO */}
+                  {item.image_url
+                    ? <img src={item.image_url} alt={item.name} style={{ width: '90px', height: '90px', objectFit: 'cover', flexShrink: 0 }} />
+                    : <div style={{ width: '90px', height: '90px', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: '1.8rem' }}>🍽️</div>
+                  }
 
-                <div style={{ flex: 1, padding: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{ flex: 1, paddingRight: '10px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
-                      <span style={{ fontWeight: 800, color: colors.text, fontSize: '1rem', textTransform: 'capitalize' }}>{item.name}</span>
-                      <span style={{ fontSize: '0.65rem', padding: '3px 8px', borderRadius: '12px', backgroundColor: getCategoryColor(item.category), color: 'white', fontWeight: 'bold', textTransform: 'uppercase' }}>{item.category}</span>
-                      {categories.find(c => c.name === item.category)?.available === false && (
-  <span style={{ fontSize: '0.65rem', padding: '3px 8px', borderRadius: '12px', background: '#fef3c7', color: '#d97706', fontWeight: 800 }}>
-    CAT. OCULTA
-  </span>
-)}
-                      {item.available === false && <span style={{ fontSize: '0.65rem', padding: '3px 8px', borderRadius: '12px', backgroundColor: '#fee2e2', color: '#ef4444', fontWeight: 'bold' }}>INDISPONÍVEL</span>}
+                  <div style={{ flex: 1, padding: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ flex: 1, paddingRight: '10px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
+                        <span style={{ fontWeight: 800, color: colors.text, fontSize: '1rem', textTransform: 'capitalize' }}>{item.name}</span>
+                        <span style={{ fontSize: '0.65rem', padding: '3px 8px', borderRadius: '12px', backgroundColor: getCategoryColor(item.category), color: 'white', fontWeight: 'bold', textTransform: 'uppercase' }}>{item.category}</span>
+                        {isInactive && <span style={{ fontSize: '0.65rem', padding: '3px 8px', borderRadius: '12px', background: '#fee2e2', color: '#ef4444', fontWeight: 800 }}>INATIVO</span>}
+                        {!isInactive && !isCategoryAvailable(item.category) && <span style={{ fontSize: '0.65rem', padding: '3px 8px', borderRadius: '12px', background: '#fef3c7', color: '#d97706', fontWeight: 800 }}>CAT. OCULTA</span>}
+                      </div>
+                      {item.description && <p style={{ margin: '0 0 4px', fontSize: '0.8rem', color: colors.textMuted }}>{item.description}</p>}
+                      <span style={{ fontWeight: 900, color: grenaColor, fontSize: '1.1rem' }}>R$ {item.price.toFixed(2)}</span>
                     </div>
-                    {item.description && <p style={{ margin: '0 0 4px', fontSize: '0.8rem', color: colors.textMuted }}>{item.description}</p>}
-                    <span style={{ fontWeight: 900, color: grenaColor, fontSize: '1.1rem' }}>R$ {item.price.toFixed(2)}</span>
-                  </div>
 
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-end' }}>
-                    {/* TOGGLE DISPONÍVEL */}
-                    <button onClick={() => handleToggleAvailable(item)}
-                      style={{ padding: '5px 10px', borderRadius: '20px', border: 'none', cursor: 'pointer', fontSize: '0.7rem', fontWeight: 800, background: item.available !== false ? '#dcfce7' : '#fee2e2', color: item.available !== false ? '#16a34a' : '#ef4444' }}>
-                      {item.available !== false ? '✅ Disponível' : '❌ Indisponível'}
-                    </button>
-                    <div style={{ display: 'flex', gap: '6px' }}>
-                      <button onClick={() => openEditModal(item)} style={{ background: '#f1f5f9', border: 'none', cursor: 'pointer', color: colors.text, width: '38px', height: '38px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><IconEdit /></button>
-                      <button onClick={() => handleDeleteProduct(item.id, item.name)} style={{ background: '#fee2e2', border: 'none', cursor: 'pointer', color: '#ef4444', width: '38px', height: '38px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><IconTrash /></button>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-end' }}>
+                      {/* TOGGLE DISPONÍVEL — só para produtos ativos */}
+                      {!isInactive && (
+                        <button onClick={() => handleToggleAvailable(item)}
+                          style={{ padding: '5px 10px', borderRadius: '20px', border: 'none', cursor: 'pointer', fontSize: '0.7rem', fontWeight: 800, background: item.available !== false ? '#dcfce7' : '#fee2e2', color: item.available !== false ? '#16a34a' : '#ef4444' }}>
+                          {item.available !== false ? '✅ Disponível' : '❌ Indisponível'}
+                        </button>
+                      )}
+
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        {/* EDITAR */}
+                        {!isInactive && (
+                          <button onClick={() => openEditModal(item)} style={{ background: '#f1f5f9', border: 'none', cursor: 'pointer', color: colors.text, width: '38px', height: '38px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <IconEdit />
+                          </button>
+                        )}
+
+                        {/* REATIVAR ou DESATIVAR */}
+                        {isInactive ? (
+                          <button onClick={() => handleReactivateProduct(item.id)}
+                            style={{ background: '#dcfce7', border: 'none', cursor: 'pointer', color: '#16a34a', width: '38px', height: '38px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem' }}
+                            title="Reativar produto">
+                            ♻️
+                          </button>
+                        ) : (
+                          <button onClick={() => handleDeactivateProduct(item.id, item.name)}
+                            style={{ background: '#fee2e2', border: 'none', cursor: 'pointer', color: '#ef4444', width: '38px', height: '38px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                            title="Desativar produto">
+                            <IconTrash />
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              )
+            })}
+
             {filteredProducts.length === 0 && (
-              <div style={{ textAlign: 'center', padding: '50px', color: colors.textMuted }}>
+              <div style={{ textAlign: 'center', padding: '50px', color: colors.textMuted, background: 'white', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
                 <div style={{ fontSize: '2rem', marginBottom: '10px' }}>📦</div>
-                {searchTerm ? 'Nenhum produto encontrado.' : 'Nenhum produto nesta categoria.'}
+                <p style={{ margin: 0 }}>{searchTerm ? 'Nenhum produto encontrado.' : showInactive ? 'Nenhum produto inativo.' : 'Nenhum produto nesta categoria.'}</p>
               </div>
             )}
           </div>
@@ -301,7 +340,6 @@ export default function ProductsPage() {
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.6)', zIndex: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(3px)', padding: '20px' }}>
           <div style={{ ...globalStyles.card, width: '100%', maxWidth: '480px', padding: '30px', maxHeight: '90vh', overflowY: 'auto' }}>
             <h3 style={{ marginTop: 0, color: grenaColor, fontSize: '1.4rem' }}>{editingProduct ? 'Editar Item' : 'Novo Item'}</h3>
-
             <form onSubmit={handleSaveProduct}>
 
               {/* UPLOAD DE FOTO */}
@@ -372,30 +410,27 @@ export default function ProductsPage() {
               <h3 style={{ margin: 0, color: colors.text, fontSize: '1.3rem' }}>Categorias</h3>
               <button onClick={() => setShowCategoryModal(false)} style={{ background: 'none', border: 'none', fontSize: '1.2rem', cursor: 'pointer', color: colors.text }}><IconX /></button>
             </div>
+
             <div style={{ maxHeight: '200px', overflowY: 'auto', marginBottom: '25px', border: `1px solid ${colors.border}`, borderRadius: '12px' }}>
               {categories.map(cat => (
                 <div key={cat.id} style={{ padding: '12px', borderBottom: `1px solid ${colors.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: editingCategory?.id === cat.id ? '#f0f9ff' : 'white' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <div style={{ width: '16px', height: '16px', borderRadius: '50%', backgroundColor: cat.color }} />
-                    <span style={{ fontSize: '0.95rem', fontWeight: 600 }}>{cat.name}</span>
+                    <div style={{ width: '16px', height: '16px', borderRadius: '50%', backgroundColor: cat.color, opacity: cat.available === false ? 0.4 : 1 }} />
+                    <span style={{ fontSize: '0.95rem', fontWeight: 600, color: cat.available === false ? '#94a3b8' : colors.text }}>{cat.name}</span>
                   </div>
-                  <div style={{ display: 'flex', gap: '5px' }}>
+                  <div style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
+                    {/* TOGGLE DISPONÍVEL */}
                     <button
-  onClick={async () => {
-    const newVal = !cat.available
-    await supabase.from('categories').update({ available: newVal }).eq('id', cat.id)
-    if (myOrgId) fetchData(myOrgId)
-  }}
-  style={{
-    fontSize: '0.7rem', fontWeight: 800, padding: '3px 8px', borderRadius: '8px', border: 'none',
-    cursor: 'pointer',
-    background: cat.available !== false ? '#dcfce7' : '#fee2e2',
-    color: cat.available !== false ? '#16a34a' : '#ef4444'
-  }}
-  title="Disponível no cardápio"
->
-  {cat.available !== false ? '✅' : '❌'}
-</button>
+                      onClick={async () => {
+                        const newVal = cat.available === false ? true : false
+                        await supabase.from('categories').update({ available: newVal }).eq('id', cat.id)
+                        if (myOrgId) fetchData(myOrgId)
+                      }}
+                      style={{ fontSize: '0.7rem', fontWeight: 800, padding: '3px 8px', borderRadius: '8px', border: 'none', cursor: 'pointer', background: cat.available !== false ? '#dcfce7' : '#fee2e2', color: cat.available !== false ? '#16a34a' : '#ef4444' }}
+                      title="Disponível no cardápio"
+                    >
+                      {cat.available !== false ? '✅' : '❌'}
+                    </button>
                     <button onClick={() => startEditCategory(cat)} style={{ color: '#3b82f6', background: 'none', border: 'none', cursor: 'pointer', padding: '5px' }}><IconEdit /></button>
                     <button onClick={() => handleDeleteCategory(cat.id)} style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer', padding: '5px' }}><IconTrash /></button>
                   </div>
@@ -403,6 +438,7 @@ export default function ProductsPage() {
               ))}
               {categories.length === 0 && <p style={{ padding: '15px', textAlign: 'center', color: colors.textMuted, fontSize: '0.9rem' }}>Nenhuma categoria criada.</p>}
             </div>
+
             <div style={{ borderTop: `1px solid ${colors.border}`, paddingTop: '20px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
                 <label style={{ fontSize: '0.9rem', color: colors.textMuted, fontWeight: 700 }}>{editingCategory ? 'Editar Categoria' : 'Nova Categoria'}</label>

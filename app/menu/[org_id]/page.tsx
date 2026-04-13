@@ -41,6 +41,7 @@ export default function MenuPage() {
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
   const [activeCategory, setActiveCategory] = useState<string>('Todos')
+  const [search, setSearch] = useState('')
   const [cart, setCart] = useState<CartItem[]>([])
   const [showCart, setShowCart] = useState(false)
   const [showCheckout, setShowCheckout] = useState(false)
@@ -81,13 +82,19 @@ export default function MenuPage() {
       .eq('available', true)
       .in('category', availableCategoryNames.length > 0 ? availableCategoryNames : ['__none__'])
       .order('category')
+
     if (configData) setConfig(configData)
     if (productsData) setProducts(productsData)
     setLoading(false)
   }
 
   const categories = ['Todos', ...Array.from(new Set(products.map(p => p.category)))]
-  const filtered = activeCategory === 'Todos' ? products : products.filter(p => p.category === activeCategory)
+
+  const filtered = products.filter(p => {
+    const matchCategory = activeCategory === 'Todos' || p.category === activeCategory
+    const matchSearch = p.name.toLowerCase().includes(search.toLowerCase())
+    return matchCategory && matchSearch
+  })
 
   const addToCart = (product: Product) => {
     setCart(prev => {
@@ -122,9 +129,7 @@ export default function MenuPage() {
 
     const paymentLine = form.payment === 'dinheiro'
       ? `💵 Dinheiro${form.change ? ' — Troco para R$ ' + form.change : ' — Sem troco'}`
-      : form.payment === 'pix'
-      ? '💠 PIX'
-      : '💳 Cartão'
+      : form.payment === 'pix' ? '💠 PIX' : '💳 Cartão'
 
     const msg = [
       `🍽️ *NOVO PEDIDO — ${config.restaurant_name}*`,
@@ -197,14 +202,47 @@ export default function MenuPage() {
         {config.address && <p style={{ margin: 0, opacity: 0.7, fontSize: '0.8rem' }}>📍 {config.address}</p>}
       </div>
 
-      {/* CATEGORIAS */}
-      <div style={{ overflowX: 'auto', padding: '15px 15px 10px', display: 'flex', gap: '10px', background: 'white', borderBottom: '1px solid #e2e8f0', position: 'sticky', top: 0, zIndex: 10 }}>
-        {categories.map(cat => (
-          <button key={cat} onClick={() => setActiveCategory(cat)}
-            style={{ padding: '8px 18px', borderRadius: '20px', border: 'none', whiteSpace: 'nowrap', fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer', background: activeCategory === cat ? primary : '#f1f5f9', color: activeCategory === cat ? 'white' : '#64748b' }}>
-            {cat}
-          </button>
-        ))}
+      {/* CATEGORIAS + BUSCA */}
+      <div style={{ background: 'white', borderBottom: '1px solid #e2e8f0', position: 'sticky', top: 0, zIndex: 10, padding: '12px 15px' }}>
+
+        {/* BUSCA */}
+        <div style={{ position: 'relative', maxWidth: '500px', margin: '0 auto 10px' }}>
+          <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', fontSize: '1rem' }}>🔍</span>
+          <input
+            type="text"
+            placeholder="Buscar produto..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            style={{
+              width: '100%', padding: '10px 10px 10px 38px',
+              borderRadius: '20px', border: '1px solid #e2e8f0',
+              fontSize: '0.9rem', outline: 'none', background: '#f8fafc',
+              boxSizing: 'border-box' as 'border-box'
+            }}
+          />
+          {search && (
+            <button onClick={() => setSearch('')}
+              style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: '1rem' }}>
+              ✕
+            </button>
+          )}
+        </div>
+
+        {/* CATEGORIAS CENTRALIZADAS */}
+        <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', justifyContent: 'center', flexWrap: 'wrap', paddingBottom: '2px' }}>
+          {categories.map(cat => (
+            <button key={cat} onClick={() => setActiveCategory(cat)}
+              style={{
+                padding: '7px 16px', borderRadius: '20px', border: 'none',
+                whiteSpace: 'nowrap', fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer',
+                background: activeCategory === cat ? primary : '#f1f5f9',
+                color: activeCategory === cat ? 'white' : '#64748b',
+                transition: 'all 0.2s'
+              }}>
+              {cat}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* PRODUTOS */}
@@ -215,6 +253,13 @@ export default function MenuPage() {
             <div style={{ fontSize: '2rem', marginBottom: '8px' }}>✅</div>
             <p style={{ margin: 0, fontWeight: 800, color: '#16a34a' }}>Pedido enviado pelo WhatsApp!</p>
             <p style={{ margin: '5px 0 0', fontSize: '0.85rem', color: '#166534' }}>Em breve entraremos em contato.</p>
+          </div>
+        )}
+
+        {filtered.length === 0 && (
+          <div style={{ textAlign: 'center', padding: '50px 20px', color: '#64748b' }}>
+            <div style={{ fontSize: '2.5rem', marginBottom: '10px' }}>🔍</div>
+            <p style={{ fontWeight: 600 }}>Nenhum produto encontrado.</p>
           </div>
         )}
 
@@ -298,7 +343,7 @@ export default function MenuPage() {
         </div>
       )}
 
-      {/* MODAL CHECKOUT — DADOS DE ENTREGA */}
+      {/* MODAL CHECKOUT */}
       {showCheckout && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 100, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
           <div style={{ background: 'white', width: '100%', maxWidth: '500px', borderRadius: '24px 24px 0 0', padding: '25px 20px', maxHeight: '92vh', overflowY: 'auto' }}>
@@ -329,7 +374,7 @@ export default function MenuPage() {
               </div>
             </div>
 
-            {/* ENDEREÇO — só se for entrega */}
+            {/* ENDEREÇO */}
             {form.modality === 'entrega' && (
               <>
                 <div style={{ marginBottom: '16px' }}>
@@ -357,7 +402,7 @@ export default function MenuPage() {
               </div>
             </div>
 
-            {/* TROCO — só se for dinheiro */}
+            {/* TROCO */}
             {form.payment === 'dinheiro' && (
               <div style={{ marginBottom: '16px' }}>
                 <label style={{ display: 'block', fontWeight: 700, marginBottom: '8px', fontSize: '0.9rem', color: '#475569' }}>Troco para quanto? (deixe vazio se não precisar)</label>
@@ -365,12 +410,10 @@ export default function MenuPage() {
               </div>
             )}
 
-            {/* BOTÃO ENVIAR */}
             <button onClick={sendWhatsAppOrder}
               style={{ width: '100%', padding: '16px', background: '#25D366', color: 'white', border: 'none', borderRadius: '12px', fontWeight: 800, fontSize: '1rem', cursor: 'pointer', marginTop: '10px' }}>
               📲 Confirmar e Enviar pelo WhatsApp
             </button>
-
           </div>
         </div>
       )}
