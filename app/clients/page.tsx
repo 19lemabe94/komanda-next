@@ -28,6 +28,7 @@ export default function ClientsPage() {
   const [totalReceivables, setTotalReceivables] = useState(0)
   const [myOrgId, setMyOrgId] = useState<string | null>(null)
   const [userRole, setUserRole] = useState<string | null>(null)
+  const [restaurantName, setRestaurantName] = useState('Meu Restaurante') // Nome para o cabeçalho do Extrato
 
   const [showClientModal, setShowClientModal] = useState(false)
   const [editingClient, setEditingClient] = useState<Client | null>(null)
@@ -67,7 +68,13 @@ export default function ClientsPage() {
     if (!session) { router.push('/login'); return }
     const { data: profile } = await supabase.from('profiles').select('org_id, role').eq('id', session.user.id).single()
     if (profile?.org_id) {
-      setMyOrgId(profile.org_id); setUserRole(profile.role); await fetchClients(profile.org_id)
+      setMyOrgId(profile.org_id)
+      setUserRole(profile.role)
+      
+      const { data: config } = await supabase.from('menu_config').select('restaurant_name').eq('org_id', profile.org_id).single()
+      if (config?.restaurant_name) setRestaurantName(config.restaurant_name)
+
+      await fetchClients(profile.org_id)
     }
     setLoading(false)
   }
@@ -99,24 +106,12 @@ export default function ClientsPage() {
     setShowClientModal(false); fetchClients(myOrgId)
   }
 
-  const handleDeleteClient = async (clientId: string) => {
-      if (!confirm('⚠️ Tem certeza que deseja excluir este cliente?\n\nSe ele tiver histórico de compras, a exclusão será bloqueada.')) return
-      const { error } = await supabase.from('clients').delete().eq('id', clientId)
-      if (error) alert('Não foi possível excluir (Possui histórico).')
-      else fetchClients(myOrgId!)
-  }
-
-    const handleDeleteClientWithHistory = async (client: Client) => {
+  const handleDeleteClientWithHistory = async (client: Client) => {
     if (!confirm(`⚠️ ATENÇÃO!\n\nIsso vai apagar TODO o histórico de "${client.name}" (compras e pagamentos) e depois excluir o cliente.\n\nEsta ação é IRREVERSÍVEL. Confirma?`)) return
 
-    // 1. Apaga os pagamentos do cliente
     await supabase.from('debt_payments').delete().eq('client_id', client.id)
 
-    // 2. Apaga as order_items das orders fiado do cliente
-    const { data: clientOrders } = await supabase
-      .from('orders')
-      .select('id')
-      .eq('client_id', client.id)
+    const { data: clientOrders } = await supabase.from('orders').select('id').eq('client_id', client.id)
 
     if (clientOrders && clientOrders.length > 0) {
       const orderIds = clientOrders.map(o => o.id)
@@ -124,15 +119,10 @@ export default function ClientsPage() {
       await supabase.from('orders').delete().in('id', orderIds)
     }
 
-    // 3. Agora sim apaga o cliente
     const { error } = await supabase.from('clients').delete().eq('id', client.id)
 
-    if (error) {
-      alert('Erro ao excluir: ' + error.message)
-    } else {
-      setShowStatementModal(null)
-      fetchClients(myOrgId!)
-    }
+    if (error) alert('Erro ao excluir: ' + error.message)
+    else { setShowStatementModal(null); fetchClients(myOrgId!) }
   }
 
   const handleShareWhatsapp = async (client: Client) => {
@@ -157,7 +147,6 @@ export default function ClientsPage() {
   // --- PAGAMENTOS ---
   const openPayModal = (client: Client) => {
       setShowPayModal(client)
-      // Já preenche com o valor total para facilitar
       setPayAmount(client.balance.toFixed(2)) 
       setPayMethod('pix')
   }
@@ -181,12 +170,6 @@ export default function ClientsPage() {
     } else { alert('Erro: ' + error.message) }
   }
 
-  const handleDeletePayment = async (paymentId: string, client: Client) => {
-    if(!confirm('⚠️ EXCLUIR PAGAMENTO?')) return;
-    await supabase.from('debt_payments').delete().eq('id', paymentId);
-    setTimeout(() => { fetchClients(myOrgId!); if (showStatementModal) handleOpenStatement(client) }, 100)
-  }
-
   const handleOpenStatement = async (client: Client) => {
     setShowStatementModal(client); setStatementLoading(true)
     const { data: orders } = await supabase.from('orders').select('id, created_at, total, order_items(quantity, product_name_snapshot)').eq('client_id', client.id).eq('status', 'concluida').eq('payment_method', 'fiado').order('created_at', { ascending: false })
@@ -199,12 +182,118 @@ export default function ClientsPage() {
     setStatementLoading(false)
   }
 
+  // --- IMPRESSÃO 58MM (32 COLUNAS CORRIGIDO PARA NÃO CORTAR) ---
   const handlePrintStatement = () => {
-    const content = document.getElementById('printable-area')?.innerHTML
-    const win = window.open('', '', 'height=600,width=800')
-    if (win && content) {
-        win.document.write('<html><head><title>Extrato</title><style>body{font-family:monospace;padding:20px}.row{display:flex;justify-content:space-between;border-bottom:1px dashed #000;padding:5px 0}.bold{font-weight:bold}.hide-print{display:none}</style></head><body>'+content+'</body></html>')
-        win.document.close(); win.print()
+    if (!showStatementModal) return;
+
+    // Alinha à esquerda e direita sem cortar
+    const formatLine = (left: string, right: string) => {
+      const spaces = 32 - left.length - right.length;
+      return left + " ".repeat(spaces > 0 ? spaces : 1) + right;
+    };
+    
+    // Centraliza o texto
+    const centerText = (text: string) => {
+      if (text.length >= 32) return text.substring(0, 32);
+      const padding = Math.floor((32 - text.length) / 2);
+      return " ".repeat(padding) + text;
+    };
+
+    // Quebra frases grandes em várias linhas de no máximo 32 caracteres
+    const wrapText = (text: string, maxLength: number) => {
+      const words = text.split(' ');
+      let lines: string[] = [];
+      let currentLine = '';
+      words.forEach(word => {
+        if ((currentLine + word).length > maxLength) {
+          lines.push(currentLine.trim());
+          currentLine = word + ' ';
+        } else {
+          currentLine += word + ' ';
+        }
+      });
+      if (currentLine) lines.push(currentLine.trim());
+      return lines;
+    };
+
+    const separator = "-".repeat(32);
+
+    let receipt = "";
+    receipt += centerText(restaurantName.toUpperCase()) + "\n";
+    receipt += centerText("EXTRATO DE CONTA (FIADO)") + "\n";
+    receipt += separator + "\n";
+
+    receipt += `CLIENTE: ${showStatementModal.name}\n`;
+    receipt += `DATA EMISSAO: ${new Date().toLocaleDateString('pt-BR')}\n`;
+    receipt += separator + "\n";
+
+    receipt += centerText("HISTORICO RECENTE") + "\n\n";
+
+    // Adiciona o histórico ao cupom quebrando as linhas perfeitamente
+    statementHistory.forEach(h => {
+      const isOrder = h.type === 'order';
+      const dateStr = new Date(h.date).toLocaleDateString('pt-BR');
+      const typeStr = isOrder ? "COMPRA" : "PAGTO";
+      
+      // Linha 1: Data e Tipo
+      receipt += formatLine(dateStr, typeStr) + "\n";
+
+      // Linha 2 e 3: Descrição completa detalhada
+      const desc = h.description || (isOrder ? "Consumo" : "Abatimento");
+      const descLines = wrapText(desc, 32);
+      descLines.forEach(line => {
+          receipt += line + "\n";
+      });
+
+      // Última linha: Valor alinhado à direita
+      const amountStr = (isOrder ? "+" : "-") + ` R$ ${h.amount.toFixed(2)}`;
+      receipt += formatLine("", amountStr) + "\n\n";
+    });
+
+    receipt += separator + "\n";
+    
+    // Status e Total
+    const statusText = showStatementModal.balance > 0.01 ? "DEVEDOR" : "CREDOR/QUITADO";
+    receipt += formatLine("SALDO ATUAL:", `R$ ${Math.abs(showStatementModal.balance).toFixed(2)}`) + "\n";
+    receipt += centerText(`SITUACAO: ${statusText}`) + "\n";
+
+    receipt += separator + "\n";
+    receipt += centerText("Obrigado pela preferencia!") + "\n\n\n\n";
+
+    const printWindow = window.open('', '_blank', 'width=400,height=600');
+    if (printWindow) {
+      printWindow.document.write(`
+        <html>
+          <head>
+            <title>Imprimir Extrato</title>
+            <style>
+              @page { margin: 0; }
+              body { 
+                font-family: 'Courier New', Courier, monospace; 
+                width: 58mm; 
+                margin: 0; 
+                padding: 10px; 
+                font-size: 12px;
+                color: #000;
+              }
+              pre { 
+                white-space: pre-wrap; 
+                word-wrap: break-word; 
+                margin: 0; 
+                font-weight: bold; 
+              }
+            </style>
+          </head>
+          <body>
+            <pre>${receipt}</pre>
+            <script>
+              window.onload = function() { window.print(); }
+              window.onafterprint = function() { window.close(); }
+            </script>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
     }
   }
 
@@ -296,7 +385,7 @@ export default function ClientsPage() {
                     </div>
                 ))}
             </div>
-            {/* RODAPÉ DO MODAL EXTRATO - substitua o div dos botões por este: */}
+            {/* RODAPÉ DO MODAL EXTRATO */}
             <div style={{padding:'15px', borderTop:'1px solid #eee', display:'flex', gap:'10px', flexWrap:'wrap'}}>
               <button onClick={handlePrintStatement} style={{...touchBtnStyle, flex:1, background:'#fff', border:'1px solid #ccc', display:'flex', alignItems:'center', justifyContent:'center', gap:'8px'}}>
                 <IconPrint /> Imprimir
@@ -305,7 +394,7 @@ export default function ClientsPage() {
               {showStatementModal.balance > 0.01 && (
                 <button onClick={() => { setShowStatementModal(null); openPayModal(showStatementModal) }} style={{ ...touchBtnStyle, flex: 1, background: grenaColor, color: 'white' }}>QUITAR</button>
               )}
-              {/* 🆕 BOTÃO NOVO - Excluir com histórico */}
+              {/* BOTÃO NOVO - Excluir com histórico */}
               <button
                 onClick={() => handleDeleteClientWithHistory(showStatementModal)}
                 style={{ ...touchBtnStyle, width: '100%', background: '#fee2e2', color: '#dc2626', border: '1px solid #fca5a5' }}

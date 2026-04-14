@@ -38,6 +38,11 @@ export function OrderDetailsModal({ orderId, label, total, onPayment, onClose, o
   const [showClientSelector, setShowClientSelector] = useState(false)
   const [myOrgId, setMyOrgId] = useState<string | null>(null)
   
+  // Informações Extras (Taxa de Entrega e Nome do Restaurante)
+  const [deliveryFee, setDeliveryFee] = useState(0)
+  const [deliveryInfo, setDeliveryInfo] = useState<any>(null)
+  const [restaurantName, setRestaurantName] = useState('Meu Restaurante')
+  
   // Custom Mode
   const [isCustomMode, setIsCustomMode] = useState(false)
   const [customName, setCustomName] = useState('')
@@ -45,13 +50,13 @@ export function OrderDetailsModal({ orderId, label, total, onPayment, onClose, o
   
   // Filtros
   const [searchTerm, setSearchTerm] = useState('')
-  const [clientSearch, setClientSearch] = useState('') // Novo: Busca de clientes
+  const [clientSearch, setClientSearch] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('TODAS')
   const [selectedProductId, setSelectedProductId] = useState('') 
   const [quantity, setQuantity] = useState(1)
   
   // Pagamento / Datas
-  const [paidAmount, setPaidAmount] = useState(0) // Valor JÁ pago (entradas)
+  const [paidAmount, setPaidAmount] = useState(0)
   const [amountToPay, setAmountToPay] = useState('') 
   const [step, setStep] = useState<'order' | 'date_edit'>('order')
   const [newDateValue, setNewDateValue] = useState('')
@@ -81,31 +86,44 @@ export function OrderDetailsModal({ orderId, label, total, onPayment, onClose, o
       const { data: profile } = await supabase.from('profiles').select('org_id').eq('id', session.user.id).single()
       if (profile?.org_id) {
         setMyOrgId(profile.org_id)
-        const [itemsRes, prodRes, catRes, clientRes, payRes, orderRes] = await Promise.all([
+        const [itemsRes, prodRes, catRes, clientRes, payRes, orderRes, configRes] = await Promise.all([
           supabase.from('order_items').select('*').eq('order_id', orderId).order('created_at', { ascending: true }),
           supabase.from('products').select('*').eq('org_id', profile.org_id).eq('active', true).order('name'),
           supabase.from('categories').select('*').eq('org_id', profile.org_id).order('name'),
           supabase.from('clients').select('id, name').eq('org_id', profile.org_id).order('name'),
           supabase.from('payments').select('amount').eq('order_id', orderId),
-          supabase.from('orders').select('created_at').eq('id', orderId).single()
+          supabase.from('orders').select('created_at, delivery_info').eq('id', orderId).single(),
+          supabase.from('menu_config').select('restaurant_name').eq('org_id', profile.org_id).single()
         ])
         if (itemsRes.data) setItems(itemsRes.data)
         if (prodRes.data) setProducts(prodRes.data)
         if (catRes.data) setCategories(catRes.data)
         if (clientRes.data) setClients(clientRes.data)
-        if (orderRes.data) setOrderDate(orderRes.data.created_at)
         
-        // Calcula quanto já foi pago (entradas parciais)
+        if (orderRes.data) {
+          setOrderDate(orderRes.data.created_at)
+          setDeliveryInfo(orderRes.data.delivery_info)
+          // Captura a taxa de entrega se existir
+          if (orderRes.data.delivery_info?.delivery_fee) {
+            setDeliveryFee(Number(orderRes.data.delivery_info.delivery_fee))
+          }
+        }
+
+        if (configRes.data?.restaurant_name) {
+          setRestaurantName(configRes.data.restaurant_name)
+        }
+        
         const totalAlreadyPaid = payRes.data?.reduce((acc, curr) => acc + curr.amount, 0) || 0
         setPaidAmount(totalAlreadyPaid)
       }
     } catch (err) { console.error(err) } finally { setLoading(false) }
   }
 
-  const localTotal = items.reduce((acc, item) => acc + (item.product_price_snapshot * item.quantity), 0)
+  // --- CÁLCULOS TOTAIS CORRIGIDOS ---
+  const itemsTotal = items.reduce((acc, item) => acc + (item.product_price_snapshot * item.quantity), 0)
+  const localTotal = itemsTotal + deliveryFee // Agora soma a taxa de entrega!
   const remainingBalance = Math.max(0, localTotal - paidAmount)
 
-  // Atualiza o valor a pagar quando muda o passo
   useEffect(() => {
     if (isPaymentStep) setAmountToPay(remainingBalance.toFixed(2))
   }, [isPaymentStep, remainingBalance])
@@ -169,7 +187,6 @@ export function OrderDetailsModal({ orderId, label, total, onPayment, onClose, o
     if (isNaN(valToPay) || valToPay <= 0) return alert("Valor inválido")
     if (valToPay > (remainingBalance + 0.10)) return alert("Valor maior que o restante!")
 
-    // 1. Se veio do Histórico (Função externa)
     if (onPayment) {
         await onPayment(orderId, valToPay, method, clientId)
         if (valToPay >= (remainingBalance - 0.05)) onClose()
@@ -177,11 +194,9 @@ export function OrderDetailsModal({ orderId, label, total, onPayment, onClose, o
         return
     }
 
-    // 2. Se for Pagamento em Dinheiro/Pix/Cartão (Entrada ou Total)
     if (method !== 'fiado') {
         await supabase.from('payments').insert([{ org_id: myOrgId, order_id: orderId, amount: valToPay, method: method }])
         
-        // Verifica se quitou
         if (valToPay >= (remainingBalance - 0.05)) {
             await supabase.from('orders').update({ status: 'concluida', payment_method: method, total: localTotal }).eq('id', orderId)
             onUpdate(); onClose()
@@ -190,26 +205,20 @@ export function OrderDetailsModal({ orderId, label, total, onPayment, onClose, o
             await loadData(); onUpdate()
         }
     } 
-    // 3. Se for FIADO
     else if (method === 'fiado' && clientId) {
         const clientName = clients.find(c => c.id === clientId)?.name
-        
-        // Verifica se tem entrada já paga
         const entrada = paidAmount
         const dividaRestante = remainingBalance
 
         if(!confirm(`Confirmar FIADO para ${clientName}?\n\nTotal: R$ ${localTotal.toFixed(2)}\nEntrada (Já paga): R$ ${entrada.toFixed(2)}\nFica devendo: R$ ${dividaRestante.toFixed(2)}`)) return
 
-        // Finaliza a ordem como Fiado
         await supabase.from('orders').update({ 
             status: 'concluida', 
             payment_method: 'fiado', 
-            total: localTotal, // Valor cheio da venda
+            total: localTotal,
             client_id: clientId 
         }).eq('id', orderId)
 
-        // IMPORTANTE: Se houve entrada, precisamos registrar o "Abatimento" na tabela de dívidas
-        // para que o saldo do cliente fique correto (Total Venda - Entrada = Saldo Devedor)
         if (entrada > 0) {
             await supabase.from('debt_payments').insert([{
                 client_id: clientId,
@@ -218,7 +227,6 @@ export function OrderDetailsModal({ orderId, label, total, onPayment, onClose, o
                 notes: 'Entrada no ato da venda'
             }])
         }
-
         onUpdate(); onClose()
     }
   }
@@ -240,9 +248,114 @@ export function OrderDetailsModal({ orderId, label, total, onPayment, onClose, o
       else { await loadData(); onUpdate(); setStep('order') }
   }
 
+  // --- IMPRESSÃO 58MM (32 COLUNAS) ---
   const handlePrint = () => {
-    const txt = items.map(i => `${i.quantity}x ${i.product_name_snapshot}`).join('\n')
-    window.alert(`MESA: ${label}\n\n${txt}\n\nTOTAL: R$ ${localTotal.toFixed(2)}\nPAGO: R$ ${paidAmount.toFixed(2)}\nRESTANTE: R$ ${remainingBalance.toFixed(2)}`)
+    // Funções de formatação de texto para 32 colunas
+    const formatLine = (left: string, right: string) => {
+      const maxLeft = 32 - right.length - 1;
+      const safeLeft = left.length > maxLeft ? left.substring(0, maxLeft) : left;
+      const spaces = 32 - safeLeft.length - right.length;
+      return safeLeft + " ".repeat(spaces > 0 ? spaces : 1) + right;
+    };
+    const centerText = (text: string) => {
+      if (text.length >= 32) return text.substring(0, 32);
+      const padding = Math.floor((32 - text.length) / 2);
+      return " ".repeat(padding) + text;
+    };
+    const separator = "-".repeat(32);
+
+    // Montando o Cupom
+    let receipt = "";
+    receipt += centerText(restaurantName.toUpperCase()) + "\n";
+    receipt += centerText("COMPROVANTE DE PEDIDO") + "\n";
+    receipt += separator + "\n";
+    
+    // Cabeçalho do Pedido
+    receipt += `PEDIDO/MESA: ${label.toUpperCase()}\n`;
+    if (deliveryInfo?.customer_name) {
+      receipt += `CLIENTE: ${deliveryInfo.customer_name}\n`;
+    }
+    if (deliveryInfo?.modality === 'entrega' && deliveryInfo?.address) {
+      // Quebra o endereço se for muito longo
+      const address = `END: ${deliveryInfo.address}${deliveryInfo.neighborhood ? ', ' + deliveryInfo.neighborhood : ''}`;
+      if (address.length > 32) {
+        receipt += address.substring(0, 32) + "\n";
+        receipt += address.substring(32) + "\n";
+      } else {
+        receipt += address + "\n";
+      }
+    }
+    receipt += separator + "\n";
+    
+    // Lista de Itens
+    receipt += centerText("ITENS DO PEDIDO") + "\n";
+    items.forEach(item => {
+      const itemName = `${item.quantity}x ${item.product_name_snapshot}`;
+      const itemPrice = `R$ ${(item.product_price_snapshot * item.quantity).toFixed(2)}`;
+      receipt += formatLine(itemName, itemPrice) + "\n";
+    });
+    receipt += separator + "\n";
+
+    // Totais (Agora incluindo a Taxa)
+    receipt += formatLine("Subtotal:", `R$ ${itemsTotal.toFixed(2)}`) + "\n";
+    if (deliveryFee > 0) {
+      receipt += formatLine("Taxa de Entrega:", `R$ ${deliveryFee.toFixed(2)}`) + "\n";
+    }
+    receipt += formatLine("TOTAL:", `R$ ${localTotal.toFixed(2)}`) + "\n";
+    
+    // Pagamentos
+    if (paidAmount > 0) {
+      receipt += formatLine("VALOR PAGO:", `R$ ${paidAmount.toFixed(2)}`) + "\n";
+      receipt += formatLine("RESTANTE:", `R$ ${remainingBalance.toFixed(2)}`) + "\n";
+    }
+    
+    // Troco (Se houver)
+    if (deliveryInfo?.change) {
+      receipt += separator + "\n";
+      receipt += formatLine("LEVAR TROCO PARA:", `R$ ${Number(deliveryInfo.change).toFixed(2)}`) + "\n";
+    }
+
+    // Rodapé
+    receipt += separator + "\n";
+    receipt += centerText("Obrigado pela preferencia!") + "\n";
+    receipt += centerText("Volte sempre!") + "\n\n\n\n"; // Espaço extra para corte da bobina
+
+    // Abre a janela de impressão formatada para impressora térmica
+    const printWindow = window.open('', '_blank', 'width=400,height=600');
+    if (printWindow) {
+      printWindow.document.write(`
+        <html>
+          <head>
+            <title>Imprimir Comanda</title>
+            <style>
+              @page { margin: 0; }
+              body { 
+                font-family: 'Courier New', Courier, monospace; /* Fonte fixa padrão de impressora */
+                width: 58mm; /* Tamanho exato da bobina */
+                margin: 0; 
+                padding: 10px; 
+                font-size: 12px;
+                color: #000;
+              }
+              pre { 
+                white-space: pre-wrap; 
+                word-wrap: break-word; 
+                margin: 0; 
+                font-weight: bold; /* Deixa a tinta mais forte no papel térmico */
+              }
+            </style>
+          </head>
+          <body>
+            <pre>${receipt}</pre>
+            <script>
+              window.onload = function() { window.print(); }
+              window.onafterprint = function() { window.close(); }
+            </script>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+    }
   }
 
   const touchBtnBase = { cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, borderRadius: '12px', border: 'none', transition: 'transform 0.1s', minHeight: '52px', fontSize: '1rem' }
@@ -313,7 +426,13 @@ export function OrderDetailsModal({ orderId, label, total, onPayment, onClose, o
           ) : isPaymentStep ? (
             <div className="no-scrollbar slide-up" style={{ flex: 1, padding: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', backgroundColor: '#fafafa', overflowY: 'auto' }}>
               <div style={{ width: '100%', marginBottom: '20px', background: 'white', padding: '15px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px', color: colors.textMuted }}><span>Total da Conta:</span><strong>R$ {localTotal.toFixed(2)}</strong></div>
+                  
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px', color: colors.textMuted }}><span>Subtotal (Itens):</span><strong>R$ {itemsTotal.toFixed(2)}</strong></div>
+                  
+                  {deliveryFee > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px', color: '#f97316' }}><span>Taxa de Entrega:</span><strong>+ R$ {deliveryFee.toFixed(2)}</strong></div>
+                  )}
+
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px', color: '#16a34a' }}><span>Já Pago (Entradas):</span><strong>- R$ {paidAmount.toFixed(2)}</strong></div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px dashed #ccc', paddingTop: '10px', fontSize: '1.2rem', fontWeight: 800, color: colors.primary }}><span>FALTA PAGAR:</span><span>R$ {remainingBalance.toFixed(2)}</span></div>
               </div>
@@ -422,8 +541,8 @@ export function OrderDetailsModal({ orderId, label, total, onPayment, onClose, o
                         </div>
                       </div>
                       <div style={{ display: 'flex', gap: '10px' }}>
-                        <button onClick={handlePrint} className="btn-grena-interactive" style={{ ...touchBtnBase, width: '55px' }}><IconPrint /></button>
-                        <button onClick={() => setIsPaymentStep(true)} disabled={items.length === 0} style={{ ...touchBtnBase, padding: '0 20px', background: items.length > 0 ? '#16a34a' : '#cbd5e1', color: 'white' }}>FECHAR ($)</button>
+                        <button onClick={handlePrint} className="btn-grena-interactive" style={{ ...touchBtnBase, width: '55px' }} title="Imprimir Comanda"><IconPrint /></button>
+                        <button onClick={() => setIsPaymentStep(true)} disabled={items.length === 0 && remainingBalance <= 0} style={{ ...touchBtnBase, padding: '0 20px', background: items.length > 0 || remainingBalance > 0 ? '#16a34a' : '#cbd5e1', color: 'white' }}>FECHAR ($)</button>
                       </div>
                     </div>
                 </div>

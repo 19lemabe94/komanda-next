@@ -196,25 +196,23 @@ export default function ReportsPage() {
     ].filter(d => d.value > 0))
   }
 
-  // --- FUNÇÃO LIMPA PARA WHATSAPP (SEM SÍMBOLOS ESTRANHOS) ---
-  const sendWhatsAppReport = () => {
-    if (!whatsappNumber) return alert('Digite um número de telefone.')
-    localStorage.setItem('komanda_whatsapp_target', whatsappNumber)
+    const sendWhatsAppReport = () => {
+      if (!whatsappNumber) return alert('Digite um número de telefone.')
 
-    const now = new Date()
-    const timeString = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-    const dateString = now.toLocaleDateString('pt-BR')
+      localStorage.setItem('komanda_whatsapp_target', whatsappNumber)
 
-    // Remove acentos
-    const removeAccents = (str: string) => str.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+      const now = new Date()
+      const timeString = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+      const dateString = now.toLocaleDateString('pt-BR')
 
-    const categoriesList = categoriesData
+      const removeAccents = (str: string) => str.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+
+      const categoriesList = categoriesData
         .sort((a, b) => b.totalQty - a.totalQty)
         .map(cat => `- ${removeAccents(cat.category)}: ${cat.totalQty}`)
         .join('\n')
 
-    // MENSAGEM PURA - ZERO EMOJIS, ZERO CARACTERES ESPECIAIS
-    const message = [
+      const message = [
         `*RESUMO KOMANDA*`,
         `${dateString} - ${timeString}`,
         ``,
@@ -228,15 +226,23 @@ export default function ReportsPage() {
         categoriesList || "- Nenhum item",
         ``,
         `_Sistema Komanda_`
-    ].join('\n')
+      ].join('\n')
 
-    const encodedMsg = encodeURIComponent(message)
-    const cleanNumber = whatsappNumber.replace(/\D/g, '') 
-    const finalNumber = cleanNumber.startsWith('55') ? cleanNumber : `55${cleanNumber}`
+      const cleanNumber = whatsappNumber.replace(/\D/g, '')
+      const finalNumber = cleanNumber.startsWith('55') ? cleanNumber : `55${cleanNumber}`
+      const url = `https://wa.me/${finalNumber}?text=${encodeURIComponent(message)}`
 
-    window.open(`https://wa.me/${finalNumber}?text=${encodedMsg}`, '_blank')
-    setShowShareModal(false)
-  }
+      // Abre em nova aba de forma compatível com mobile
+      const link = document.createElement('a')
+      link.href = url
+      link.target = '_blank'
+      link.rel = 'noopener noreferrer'
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+
+      setShowShareModal(false)
+    }
 
   const CustomTooltip = ({ active, payload, totalValue, isCurrency = true, suffix = '' }: any) => {
     if (active && payload && payload.length) {
