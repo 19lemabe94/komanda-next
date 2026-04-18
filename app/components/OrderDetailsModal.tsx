@@ -103,7 +103,6 @@ export function OrderDetailsModal({ orderId, label, total, onPayment, onClose, o
         if (orderRes.data) {
           setOrderDate(orderRes.data.created_at)
           setDeliveryInfo(orderRes.data.delivery_info)
-          // Captura a taxa de entrega se existir
           if (orderRes.data.delivery_info?.delivery_fee) {
             setDeliveryFee(Number(orderRes.data.delivery_info.delivery_fee))
           }
@@ -119,9 +118,9 @@ export function OrderDetailsModal({ orderId, label, total, onPayment, onClose, o
     } catch (err) { console.error(err) } finally { setLoading(false) }
   }
 
-  // --- CÁLCULOS TOTAIS CORRIGIDOS ---
+  // --- CÁLCULOS TOTAIS ---
   const itemsTotal = items.reduce((acc, item) => acc + (item.product_price_snapshot * item.quantity), 0)
-  const localTotal = itemsTotal + deliveryFee // Agora soma a taxa de entrega!
+  const localTotal = itemsTotal + deliveryFee 
   const remainingBalance = Math.max(0, localTotal - paidAmount)
 
   useEffect(() => {
@@ -140,7 +139,7 @@ export function OrderDetailsModal({ orderId, label, total, onPayment, onClose, o
   
   const getCategoryColor = (catName: string) => { const found = categories.find(c => c.name === catName); return found ? found.color : '#94a3b8' }
 
-  // --- AÇÕES DE ITENS ---
+  // --- AÇÕES DE ITENS COM ATUALIZAÇÃO NO DASHBOARD ---
   const handleAddItem = async () => {
     if (!myOrgId) return;
     let payload: any = {}
@@ -155,22 +154,51 @@ export function OrderDetailsModal({ orderId, label, total, onPayment, onClose, o
         if (!product) return;
         payload = { order_id: orderId, product_id: product.id, quantity: quantity, org_id: myOrgId, product_name_snapshot: product.name, product_price_snapshot: product.price }
     }
+    
     const { error } = await supabase.from('order_items').insert([payload]);
-    if (error) { alert(`Erro: ${error.message}`) } else { setQuantity(1); setCustomName(''); setCustomPrice(''); await loadData(); onUpdate() }
+    
+    if (error) { 
+        alert(`Erro: ${error.message}`) 
+    } else { 
+        // Atualiza o total da mesa no banco de dados
+        const itemTotal = payload.product_price_snapshot * payload.quantity;
+        await supabase.from('orders').update({ total: localTotal + itemTotal }).eq('id', orderId);
+        
+        setQuantity(1); setCustomName(''); setCustomPrice(''); await loadData(); onUpdate() 
+    }
   };
 
   const handleRemoveItem = async (itemId: string) => {
     if (userRole !== 'admin') { alert('🔒 Acesso Negado: Apenas gerentes podem remover itens.'); return }
     if (!confirm('Remover item?')) return;
-    const { error } = await supabase.from('order_items').delete().eq('id', itemId); if (!error) { await loadData(); onUpdate() }
+    
+    // Identifica o item antes de deletar
+    const itemToRemove = items.find(i => i.id === itemId);
+    
+    const { error } = await supabase.from('order_items').delete().eq('id', itemId); 
+    
+    if (!error) { 
+        // Subtrai o valor da mesa no banco de dados
+        if (itemToRemove) {
+            const itemTotal = itemToRemove.product_price_snapshot * itemToRemove.quantity;
+            await supabase.from('orders').update({ total: localTotal - itemTotal }).eq('id', orderId);
+        }
+        await loadData(); onUpdate() 
+    }
   }
 
   const handleClearOrder = async () => {
     if (items.length === 0) return
     if (userRole !== 'admin') { alert('🔒 Acesso Negado: Apenas gerentes podem zerar mesas.'); return }
     if (!confirm('⚠️ ZERAR COMANDA? Isso apagará TODOS os itens e pagamentos.')) return;
+    
     await supabase.from('payments').delete().eq('order_id', orderId);
-    await supabase.from('order_items').delete().eq('order_id', orderId); await loadData(); onUpdate();
+    await supabase.from('order_items').delete().eq('order_id', orderId); 
+    
+    // Zera os itens da mesa no banco, deixando apenas a taxa de entrega (se for delivery)
+    await supabase.from('orders').update({ total: deliveryFee }).eq('id', orderId);
+    
+    await loadData(); onUpdate();
   }
 
   // --- PAGAMENTO E FIADO ---
@@ -248,23 +276,38 @@ export function OrderDetailsModal({ orderId, label, total, onPayment, onClose, o
       else { await loadData(); onUpdate(); setStep('order') }
   }
 
-  // --- IMPRESSÃO 58MM (32 COLUNAS) ---
+  // --- IMPRESSÃO 58MM (32 COLUNAS COMPLETA) ---
   const handlePrint = () => {
-    // Funções de formatação de texto para 32 colunas
+    // Alinha na esquerda e direita sem quebrar
     const formatLine = (left: string, right: string) => {
-      const maxLeft = 32 - right.length - 1;
-      const safeLeft = left.length > maxLeft ? left.substring(0, maxLeft) : left;
-      const spaces = 32 - safeLeft.length - right.length;
-      return safeLeft + " ".repeat(spaces > 0 ? spaces : 1) + right;
+      const spaces = 32 - left.length - right.length;
+      return left + " ".repeat(spaces > 0 ? spaces : 1) + right;
     };
+    // Centraliza o texto
     const centerText = (text: string) => {
       if (text.length >= 32) return text.substring(0, 32);
       const padding = Math.floor((32 - text.length) / 2);
       return " ".repeat(padding) + text;
     };
+    // Quebra palavras inteiras respeitando os 32 caracteres
+    const wrapText = (text: string, maxLength: number) => {
+      const words = text.split(' ');
+      let lines: string[] = [];
+      let currentLine = '';
+      words.forEach(word => {
+        if ((currentLine + word).length > maxLength) {
+          lines.push(currentLine.trim());
+          currentLine = word + ' ';
+        } else {
+          currentLine += word + ' ';
+        }
+      });
+      if (currentLine) lines.push(currentLine.trim());
+      return lines;
+    };
+    
     const separator = "-".repeat(32);
 
-    // Montando o Cupom
     let receipt = "";
     receipt += centerText(restaurantName.toUpperCase()) + "\n";
     receipt += centerText("COMPROVANTE DE PEDIDO") + "\n";
@@ -275,33 +318,39 @@ export function OrderDetailsModal({ orderId, label, total, onPayment, onClose, o
     if (deliveryInfo?.customer_name) {
       receipt += `CLIENTE: ${deliveryInfo.customer_name}\n`;
     }
+    
+    // Endereço e Referência usando o wrapText
     if (deliveryInfo?.modality === 'entrega' && deliveryInfo?.address) {
-      // Quebra o endereço se for muito longo
       const address = `END: ${deliveryInfo.address}${deliveryInfo.neighborhood ? ', ' + deliveryInfo.neighborhood : ''}`;
-      if (address.length > 32) {
-        receipt += address.substring(0, 32) + "\n";
-        receipt += address.substring(32) + "\n";
-      } else {
-        receipt += address + "\n";
+      const addressLines = wrapText(address, 32);
+      addressLines.forEach(line => receipt += line + "\n");
+      
+      if (deliveryInfo?.reference) {
+        const refLines = wrapText(`REF: ${deliveryInfo.reference}`, 32);
+        refLines.forEach(line => receipt += line + "\n");
       }
     }
     receipt += separator + "\n";
     
-    // Lista de Itens
+    // Lista de Itens (Com quebra de linha inteligente)
     receipt += centerText("ITENS DO PEDIDO") + "\n";
     items.forEach(item => {
       const itemName = `${item.quantity}x ${item.product_name_snapshot}`;
       const itemPrice = `R$ ${(item.product_price_snapshot * item.quantity).toFixed(2)}`;
-      receipt += formatLine(itemName, itemPrice) + "\n";
+      
+      const nameLines = wrapText(itemName, 32);
+      nameLines.forEach(line => receipt += line + "\n");
+      // Joga o preço alinhado à direita na linha de baixo para não dar conflito
+      receipt += formatLine("", itemPrice) + "\n\n";
     });
     receipt += separator + "\n";
 
-    // Totais (Agora incluindo a Taxa)
+    // Totais 
     receipt += formatLine("Subtotal:", `R$ ${itemsTotal.toFixed(2)}`) + "\n";
     if (deliveryFee > 0) {
       receipt += formatLine("Taxa de Entrega:", `R$ ${deliveryFee.toFixed(2)}`) + "\n";
     }
-    receipt += formatLine("TOTAL:", `R$ ${localTotal.toFixed(2)}`) + "\n";
+    receipt += formatLine("TOTAL DA CONTA:", `R$ ${localTotal.toFixed(2)}`) + "\n";
     
     // Pagamentos
     if (paidAmount > 0) {
@@ -318,30 +367,30 @@ export function OrderDetailsModal({ orderId, label, total, onPayment, onClose, o
     // Rodapé
     receipt += separator + "\n";
     receipt += centerText("Obrigado pela preferencia!") + "\n";
-    receipt += centerText("Volte sempre!") + "\n\n\n\n"; // Espaço extra para corte da bobina
+    receipt += centerText("Volte sempre!") + "\n\n\n\n";
 
-    // Abre a janela de impressão formatada para impressora térmica
+    // Abre a janela de impressão
     const printWindow = window.open('', '_blank', 'width=400,height=600');
     if (printWindow) {
       printWindow.document.write(`
         <html>
           <head>
             <title>Imprimir Comanda</title>
+            <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
             <style>
-              @page { margin: 0; }
+              @page { margin: 0; size: 58mm auto; }
               body { 
-                font-family: 'Courier New', Courier, monospace; /* Fonte fixa padrão de impressora */
-                width: 58mm; /* Tamanho exato da bobina */
+                font-family: 'Courier New', Courier, 'Roboto Mono', 'Liberation Mono', monospace; 
+                width: 58mm; 
                 margin: 0; 
                 padding: 10px; 
                 font-size: 12px;
                 color: #000;
               }
               pre { 
-                white-space: pre-wrap; 
-                word-wrap: break-word; 
+                white-space: pre; 
                 margin: 0; 
-                font-weight: bold; /* Deixa a tinta mais forte no papel térmico */
+                font-weight: bold; 
               }
             </style>
           </head>

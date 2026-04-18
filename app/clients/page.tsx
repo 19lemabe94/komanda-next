@@ -265,11 +265,13 @@ export default function ClientsPage() {
       printWindow.document.write(`
         <html>
           <head>
-            <title>Imprimir Extrato</title>
+            <title>Imprimir Comanda</title>
+            <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
             <style>
-              @page { margin: 0; }
+              @page { margin: 0; size: 58mm auto; }
               body { 
-                font-family: 'Courier New', Courier, monospace; 
+                /* Adicionamos fontes de Android e iOS na lista */
+                font-family: 'Courier New', Courier, 'Roboto Mono', 'Liberation Mono', monospace; 
                 width: 58mm; 
                 margin: 0; 
                 padding: 10px; 
@@ -277,8 +279,9 @@ export default function ClientsPage() {
                 color: #000;
               }
               pre { 
-                white-space: pre-wrap; 
-                word-wrap: break-word; 
+                /* MUDANÇA PRINCIPAL: "pre" em vez de "pre-wrap" */
+                /* Isso obriga o celular a respeitar a NOSSA matemática de 32 colunas */
+                white-space: pre; 
                 margin: 0; 
                 font-weight: bold; 
               }
