@@ -276,20 +276,17 @@ export function OrderDetailsModal({ orderId, label, total, onPayment, onClose, o
       else { await loadData(); onUpdate(); setStep('order') }
   }
 
-  // --- IMPRESSÃO 58MM (32 COLUNAS COMPLETA) ---
+// --- IMPRESSÃO 58MM (32 COLUNAS COMPLETA) ---
   const handlePrint = () => {
-    // Alinha na esquerda e direita sem quebrar
     const formatLine = (left: string, right: string) => {
       const spaces = 32 - left.length - right.length;
       return left + " ".repeat(spaces > 0 ? spaces : 1) + right;
     };
-    // Centraliza o texto
     const centerText = (text: string) => {
       if (text.length >= 32) return text.substring(0, 32);
       const padding = Math.floor((32 - text.length) / 2);
       return " ".repeat(padding) + text;
     };
-    // Quebra palavras inteiras respeitando os 32 caracteres
     const wrapText = (text: string, maxLength: number) => {
       const words = text.split(' ');
       let lines: string[] = [];
@@ -313,13 +310,11 @@ export function OrderDetailsModal({ orderId, label, total, onPayment, onClose, o
     receipt += centerText("COMPROVANTE DE PEDIDO") + "\n";
     receipt += separator + "\n";
     
-    // Cabeçalho do Pedido
     receipt += `PEDIDO/MESA: ${label.toUpperCase()}\n`;
     if (deliveryInfo?.customer_name) {
       receipt += `CLIENTE: ${deliveryInfo.customer_name}\n`;
     }
     
-    // Endereço e Referência usando o wrapText
     if (deliveryInfo?.modality === 'entrega' && deliveryInfo?.address) {
       const address = `END: ${deliveryInfo.address}${deliveryInfo.neighborhood ? ', ' + deliveryInfo.neighborhood : ''}`;
       const addressLines = wrapText(address, 32);
@@ -331,74 +326,67 @@ export function OrderDetailsModal({ orderId, label, total, onPayment, onClose, o
       }
     }
     receipt += separator + "\n";
-    
-    // Lista de Itens (Com quebra de linha inteligente)
     receipt += centerText("ITENS DO PEDIDO") + "\n";
-    items.forEach(item => {
-      const itemName = `${item.quantity}x ${item.product_name_snapshot}`;
-      const itemPrice = `R$ ${(item.product_price_snapshot * item.quantity).toFixed(2)}`;
-      
-      const nameLines = wrapText(itemName, 32);
-      nameLines.forEach(line => receipt += line + "\n");
-      // Joga o preço alinhado à direita na linha de baixo para não dar conflito
-      receipt += formatLine("", itemPrice) + "\n\n";
-    });
     receipt += separator + "\n";
 
-    // Totais 
+    // NOVO LAYOUT DE PRODUTOS COM ESPAÇAMENTO (Unitário e Total)
+    items.forEach(item => {
+      // Linha 1: Nome do produto
+      const nameLines = wrapText(item.product_name_snapshot.toUpperCase(), 32);
+      nameLines.forEach(line => receipt += line + "\n");
+      
+      // Linha 2: Quantidade x Valor Unitário ...... Valor Total
+      const unitDetails = `${item.quantity}x R$ ${item.product_price_snapshot.toFixed(2)}`;
+      const totalDetails = `R$ ${(item.product_price_snapshot * item.quantity).toFixed(2)}`;
+      receipt += formatLine(unitDetails, totalDetails) + "\n\n"; // \n\n cria a linha em branco separadora
+    });
+
+    receipt += separator + "\n";
     receipt += formatLine("Subtotal:", `R$ ${itemsTotal.toFixed(2)}`) + "\n";
     if (deliveryFee > 0) {
       receipt += formatLine("Taxa de Entrega:", `R$ ${deliveryFee.toFixed(2)}`) + "\n";
     }
     receipt += formatLine("TOTAL DA CONTA:", `R$ ${localTotal.toFixed(2)}`) + "\n";
     
-    // Pagamentos
     if (paidAmount > 0) {
       receipt += formatLine("VALOR PAGO:", `R$ ${paidAmount.toFixed(2)}`) + "\n";
       receipt += formatLine("RESTANTE:", `R$ ${remainingBalance.toFixed(2)}`) + "\n";
     }
     
-    // Troco (Se houver)
     if (deliveryInfo?.change) {
       receipt += separator + "\n";
       receipt += formatLine("LEVAR TROCO PARA:", `R$ ${Number(deliveryInfo.change).toFixed(2)}`) + "\n";
     }
 
-    // Rodapé
     receipt += separator + "\n";
     receipt += centerText("Obrigado pela preferencia!") + "\n";
     receipt += centerText("Volte sempre!") + "\n\n\n\n";
 
-    // Abre a janela de impressão
     const printWindow = window.open('', '_blank', 'width=400,height=600');
     if (printWindow) {
       printWindow.document.write(`
+        <!DOCTYPE html>
         <html>
           <head>
+            <meta charset="utf-8">
             <title>Imprimir Comanda</title>
             <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
             <style>
               @page { margin: 0; size: 58mm auto; }
               body { 
                 font-family: 'Courier New', Courier, 'Roboto Mono', 'Liberation Mono', monospace; 
-                width: 58mm; 
-                margin: 0; 
-                padding: 10px; 
-                font-size: 12px;
-                color: #000;
+                width: 58mm; margin: 0; padding: 10px; font-size: 12px; color: #000;
               }
-              pre { 
-                white-space: pre; 
-                margin: 0; 
-                font-weight: bold; 
-              }
+              pre { white-space: pre-wrap; word-break: break-word; margin: 0; font-weight: bold; }
             </style>
           </head>
           <body>
             <pre>${receipt}</pre>
             <script>
-              window.onload = function() { window.print(); }
-              window.onafterprint = function() { window.close(); }
+              // O Atraso Mágico que impede o PDF branco no PC
+              setTimeout(function() {
+                window.print();
+              }, 500);
             </script>
           </body>
         </html>

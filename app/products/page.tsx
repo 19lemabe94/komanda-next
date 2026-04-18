@@ -26,7 +26,7 @@ const COLOR_PALETTE = [
 type Product = {
   id: string, name: string, description: string, price: number,
   category: string, active: boolean, available: boolean,
-  org_id: string, image_url?: string
+  org_id: string, image_url?: string, has_sides: boolean
 }
 type Category = { id: string, name: string, color: string, org_id: string, available: boolean }
 
@@ -51,7 +51,7 @@ export default function ProductsPage() {
 
   const [prodForm, setProdForm] = useState({
     name: '', description: '', price: '', category: '',
-    image_url: '', available: true
+    image_url: '', available: true, has_sides: false
   })
   const [catName, setCatName] = useState('')
   const [catColor, setCatColor] = useState(COLOR_PALETTE[10])
@@ -102,7 +102,7 @@ export default function ProductsPage() {
 
   const openCreateModal = () => {
     setEditingProduct(null)
-    setProdForm({ name: '', description: '', price: '', category: categories.length > 0 ? categories[0].name : '', image_url: '', available: true })
+    setProdForm({ name: '', description: '', price: '', category: categories.length > 0 ? categories[0].name : '', image_url: '', available: true, has_sides: false })
     setShowProductModal(true)
   }
 
@@ -114,7 +114,8 @@ export default function ProductsPage() {
       price: product.price.toString(),
       category: product.category,
       image_url: product.image_url || '',
-      available: product.available !== false
+      available: product.available !== false,
+      has_sides: product.has_sides || false
     })
     setShowProductModal(true)
   }
@@ -152,6 +153,7 @@ export default function ProductsPage() {
       category: prodForm.category,
       image_url: prodForm.image_url || null,
       available: prodForm.available,
+      has_sides: prodForm.has_sides, // Adicionando a coluna nova no payload!
       org_id: myOrgId,
       active: true
     }
@@ -284,6 +286,7 @@ export default function ProductsPage() {
                         {!isInactive && !isCategoryAvailable(item.category) && <span style={{ fontSize: '0.65rem', padding: '3px 8px', borderRadius: '12px', background: '#fef3c7', color: '#d97706', fontWeight: 800 }}>CAT. OCULTA</span>}
                       </div>
                       {item.description && <p style={{ margin: '0 0 4px', fontSize: '0.8rem', color: colors.textMuted }}>{item.description}</p>}
+                      {item.has_sides && <span style={{ fontSize: '0.7rem', color: '#d97706', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>🍟 Permite Acompanhamento</span>}
                       <span style={{ fontWeight: 900, color: grenaColor, fontSize: '1.1rem' }}>R$ {item.price.toFixed(2)}</span>
                     </div>
 
@@ -379,16 +382,33 @@ export default function ProductsPage() {
               <label style={{ display: 'block', fontSize: '0.9rem', marginBottom: '8px', marginTop: '15px', color: colors.textMuted, fontWeight: 700 }}>Descrição (Opcional)</label>
               <textarea value={prodForm.description} onChange={e => setProdForm({ ...prodForm, description: e.target.value })} style={{ ...globalStyles.input, resize: 'none', padding: '12px' }} rows={3} placeholder="Ingredientes, observações..." />
 
-              {/* TOGGLE DISPONÍVEL */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '20px', padding: '15px', background: '#f8fafc', borderRadius: '12px', border: `1px solid ${colors.border}` }}>
-                <div>
-                  <p style={{ margin: 0, fontWeight: 700, fontSize: '0.9rem', color: colors.text }}>Disponível no cardápio</p>
-                  <p style={{ margin: 0, fontSize: '0.75rem', color: colors.textMuted }}>Aparece no cardápio digital</p>
+              {/* OPÇÕES ADICIONAIS: ACOMPANHAMENTOS E DISPONIBILIDADE */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '20px' }}>
+                
+                {/* TOGGLE: TEM ACOMPANHAMENTO? (Fritas/Salada) */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '15px', background: '#fff7ed', borderRadius: '12px', border: '1px solid #fed7aa' }}>
+                  <div>
+                    <p style={{ margin: 0, fontWeight: 800, fontSize: '0.9rem', color: '#c2410c' }}>Opção de Acompanhamento</p>
+                    <p style={{ margin: 0, fontSize: '0.75rem', color: '#ea580c' }}>Cliente escolhe: Fritas ou Salada</p>
+                  </div>
+                  <button type="button" onClick={() => setProdForm(f => ({ ...f, has_sides: !f.has_sides }))}
+                    style={{ width: '52px', height: '28px', borderRadius: '14px', border: 'none', cursor: 'pointer', background: prodForm.has_sides ? '#f97316' : '#fdba74', position: 'relative', transition: 'background 0.3s' }}>
+                    <div style={{ width: '22px', height: '22px', borderRadius: '50%', background: 'white', position: 'absolute', top: '3px', transition: 'left 0.3s', left: prodForm.has_sides ? '27px' : '3px', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
+                  </button>
                 </div>
-                <button type="button" onClick={() => setProdForm(f => ({ ...f, available: !f.available }))}
-                  style={{ width: '52px', height: '28px', borderRadius: '14px', border: 'none', cursor: 'pointer', background: prodForm.available ? '#16a34a' : '#cbd5e1', position: 'relative', transition: 'background 0.3s' }}>
-                  <div style={{ width: '22px', height: '22px', borderRadius: '50%', background: 'white', position: 'absolute', top: '3px', transition: 'left 0.3s', left: prodForm.available ? '27px' : '3px', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
-                </button>
+
+                {/* TOGGLE DISPONÍVEL */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '15px', background: '#f8fafc', borderRadius: '12px', border: `1px solid ${colors.border}` }}>
+                  <div>
+                    <p style={{ margin: 0, fontWeight: 700, fontSize: '0.9rem', color: colors.text }}>Disponível no cardápio</p>
+                    <p style={{ margin: 0, fontSize: '0.75rem', color: colors.textMuted }}>Aparece no cardápio digital</p>
+                  </div>
+                  <button type="button" onClick={() => setProdForm(f => ({ ...f, available: !f.available }))}
+                    style={{ width: '52px', height: '28px', borderRadius: '14px', border: 'none', cursor: 'pointer', background: prodForm.available ? '#16a34a' : '#cbd5e1', position: 'relative', transition: 'background 0.3s' }}>
+                    <div style={{ width: '22px', height: '22px', borderRadius: '50%', background: 'white', position: 'absolute', top: '3px', transition: 'left 0.3s', left: prodForm.available ? '27px' : '3px', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
+                  </button>
+                </div>
+
               </div>
 
               <div style={{ display: 'flex', gap: '12px', marginTop: '20px' }}>

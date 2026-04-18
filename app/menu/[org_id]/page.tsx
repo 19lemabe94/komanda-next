@@ -12,6 +12,7 @@ type Product = {
   description: string | null
   image_url: string | null
   available: boolean
+  has_sides: boolean // A coluna nova adicionada aqui!
 }
 
 type MenuConfig = {
@@ -45,8 +46,6 @@ type DeliveryForm = {
   payment: 'dinheiro' | 'cartao' | 'pix'
   change: string
 }
-
-const REFEICAO_CATEGORY = 'refeição'
 
 export default function MenuPage() {
   const { org_id } = useParams()
@@ -89,7 +88,6 @@ export default function MenuPage() {
       .in('category', availableCategoryNames.length > 0 ? availableCategoryNames : ['__none__'])
       .order('category')
 
-    // Busca as taxas de entrega
     const { data: feesData } = await supabase
       .from('delivery_fees').select('*').eq('org_id', org_id).order('neighborhood')
 
@@ -108,11 +106,10 @@ export default function MenuPage() {
     return matchCategory && matchSearch
   })
 
-  const isRefeicao = (product: Product) =>
-    product.category.toLowerCase() === REFEICAO_CATEGORY
-
+  // --- NOVA LÓGICA DE ACOMPANHAMENTO ---
   const handleAddClick = (product: Product) => {
-    if (isRefeicao(product)) {
+    // Agora olhamos para a coluna has_sides do banco, em vez da categoria inteira!
+    if (product.has_sides) {
       setSelectedProduct(product)
       setAccompaniment(null)
       setNotes('')
@@ -160,7 +157,8 @@ export default function MenuPage() {
 
   const handleConfirmProduct = () => {
     if (!selectedProduct) return
-    if (isRefeicao(selectedProduct) && !accompaniment) {
+    // Validação também usa o has_sides agora
+    if (selectedProduct.has_sides && !accompaniment) {
       alert('Escolha o acompanhamento!')
       return
     }
@@ -214,14 +212,14 @@ export default function MenuPage() {
           label,
           status: 'aberta',
           type: 'delivery',
-          total: finalTotal, // Envia o total já com a taxa somada
+          total: finalTotal, 
           payment_method: form.payment,
           delivery_info: {
             customer_name: form.name,
             modality: form.modality,
             address: form.address,
             neighborhood: form.neighborhood,
-            delivery_fee: currentDeliveryFee, // Registra o valor da taxa na order
+            delivery_fee: currentDeliveryFee, 
             reference: form.reference,
             change: form.change
           }
@@ -400,7 +398,7 @@ export default function MenuPage() {
                 <div style={{ flex: 1, padding: '15px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                   <div>
                     <h3 style={{ margin: '0 0 4px', fontSize: '1rem', fontWeight: 800, color: '#0f172a', textTransform: 'capitalize' }}>{product.name}</h3>
-                    {isRefeicao(product) && (
+                    {product.has_sides && (
                       <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600 }}>🍟 Acompanha fritas ou salada</span>
                     )}
                     {product.description && <p style={{ margin: '4px 0 8px', fontSize: '0.8rem', color: '#64748b', lineHeight: 1.4 }}>{product.description}</p>}
@@ -443,21 +441,24 @@ export default function MenuPage() {
               <button onClick={() => setSelectedProduct(null)} style={{ background: '#f1f5f9', border: 'none', borderRadius: '50%', width: '36px', height: '36px', cursor: 'pointer', fontSize: '1.1rem' }}>✕</button>
             </div>
 
-            <div style={{ marginBottom: '20px' }}>
-              <label style={{ display: 'block', fontWeight: 800, marginBottom: '10px', fontSize: '0.95rem', color: '#0f172a' }}>
-                Acompanhamento <span style={{ color: '#ef4444' }}>*</span>
-              </label>
-              <div style={{ display: 'flex', gap: '12px' }}>
-                <button type="button" onClick={() => setAccompaniment('fritas')}
-                  style={{ ...optionBtnStyle(accompaniment === 'fritas', '#f97316'), padding: '15px', fontSize: '1rem', flex: 1, borderRadius: '12px', border: accompaniment === 'fritas' ? 'none' : '2px solid #e2e8f0' }}>
-                  🍟 Fritas
-                </button>
-                <button type="button" onClick={() => setAccompaniment('salada')}
-                  style={{ ...optionBtnStyle(accompaniment === 'salada', '#16a34a'), padding: '15px', fontSize: '1rem', flex: 1, borderRadius: '12px', border: accompaniment === 'salada' ? 'none' : '2px solid #e2e8f0' }}>
-                  🥗 Salada
-                </button>
+            {/* SÓ MOSTRA AS OPÇÕES DE FRITAS/SALADA SE O PRODUTO PERMITIR */}
+            {selectedProduct.has_sides && (
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{ display: 'block', fontWeight: 800, marginBottom: '10px', fontSize: '0.95rem', color: '#0f172a' }}>
+                  Acompanhamento <span style={{ color: '#ef4444' }}>*</span>
+                </label>
+                <div style={{ display: 'flex', gap: '12px' }}>
+                  <button type="button" onClick={() => setAccompaniment('fritas')}
+                    style={{ ...optionBtnStyle(accompaniment === 'fritas', '#f97316'), padding: '15px', fontSize: '1rem', flex: 1, borderRadius: '12px', border: accompaniment === 'fritas' ? 'none' : '2px solid #e2e8f0' }}>
+                    🍟 Fritas
+                  </button>
+                  <button type="button" onClick={() => setAccompaniment('salada')}
+                    style={{ ...optionBtnStyle(accompaniment === 'salada', '#16a34a'), padding: '15px', fontSize: '1rem', flex: 1, borderRadius: '12px', border: accompaniment === 'salada' ? 'none' : '2px solid #e2e8f0' }}>
+                    🥗 Salada
+                  </button>
+                </div>
               </div>
-            </div>
+            )}
 
             <div style={{ marginBottom: '20px' }}>
               <label style={{ display: 'block', fontWeight: 700, marginBottom: '8px', fontSize: '0.9rem', color: '#475569' }}>
@@ -510,7 +511,7 @@ export default function MenuPage() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <button onClick={() => removeFromCart(item.product, item.accompaniment, item.notes)} style={{ width: '28px', height: '28px', borderRadius: '50%', border: `2px solid ${primary}`, background: 'white', color: primary, fontWeight: 900, cursor: 'pointer' }}>−</button>
                     <span style={{ fontWeight: 800, minWidth: '20px', textAlign: 'center' }}>{item.quantity}</span>
-                    <button onClick={() => isRefeicao(item.product) ? (setSelectedProduct(item.product), setAccompaniment(item.accompaniment || null), setNotes(item.notes || '')) : addToCart(item.product, item.accompaniment, item.notes)}
+                    <button onClick={() => item.product.has_sides ? (setSelectedProduct(item.product), setAccompaniment(item.accompaniment || null), setNotes(item.notes || '')) : addToCart(item.product, item.accompaniment, item.notes)}
                       style={{ width: '28px', height: '28px', borderRadius: '50%', border: 'none', background: primary, color: 'white', fontWeight: 900, cursor: 'pointer' }}>+</button>
                     <span style={{ fontWeight: 800, color: primary, minWidth: '70px', textAlign: 'right' }}>R$ {(item.product.price * item.quantity).toFixed(2)}</span>
                   </div>

@@ -171,35 +171,31 @@ export default function ClientsPage() {
   }
 
   const handleOpenStatement = async (client: Client) => {
-    setShowStatementModal(client); setStatementLoading(true)
-    const { data: orders } = await supabase.from('orders').select('id, created_at, total, order_items(quantity, product_name_snapshot)').eq('client_id', client.id).eq('status', 'concluida').eq('payment_method', 'fiado').order('created_at', { ascending: false })
-    const { data: payments } = await supabase.from('debt_payments').select('id, created_at, amount, notes').eq('client_id', client.id).order('created_at', { ascending: false })
-    
-    const history: HistoryItem[] = []
-    orders?.forEach((o: any) => history.push({ type: 'order', id: o.id, date: o.created_at, amount: o.total, description: o.order_items.map((i:any)=>`${i.quantity}x ${i.product_name_snapshot}`).join(', '), details: o.order_items }))
-    payments?.forEach((p: any) => history.push({ type: 'payment', id: p.id, date: p.created_at, amount: p.amount, description: p.notes || 'Pagamento' }))
-    setStatementHistory(history.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()))
-    setStatementLoading(false)
-  }
+      setShowStatementModal(client); setStatementLoading(true)
+      // Atualizado: Agora busca o preço unitário (product_price_snapshot) também
+      const { data: orders } = await supabase.from('orders').select('id, created_at, total, order_items(quantity, product_name_snapshot, product_price_snapshot)').eq('client_id', client.id).eq('status', 'concluida').eq('payment_method', 'fiado').order('created_at', { ascending: false })
+      const { data: payments } = await supabase.from('debt_payments').select('id, created_at, amount, notes').eq('client_id', client.id).order('created_at', { ascending: false })
+      
+      const history: HistoryItem[] = []
+      orders?.forEach((o: any) => history.push({ type: 'order', id: o.id, date: o.created_at, amount: o.total, description: o.order_items.map((i:any)=>`${i.quantity}x ${i.product_name_snapshot}`).join(', '), details: o.order_items }))
+      payments?.forEach((p: any) => history.push({ type: 'payment', id: p.id, date: p.created_at, amount: p.amount, description: p.notes || 'Pagamento' }))
+      setStatementHistory(history.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()))
+      setStatementLoading(false)
+    }
 
-  // --- IMPRESSÃO 58MM (32 COLUNAS CORRIGIDO PARA NÃO CORTAR) ---
+// --- IMPRESSÃO 58MM DO EXTRATO ---
   const handlePrintStatement = () => {
     if (!showStatementModal) return;
 
-    // Alinha à esquerda e direita sem cortar
     const formatLine = (left: string, right: string) => {
       const spaces = 32 - left.length - right.length;
       return left + " ".repeat(spaces > 0 ? spaces : 1) + right;
     };
-    
-    // Centraliza o texto
     const centerText = (text: string) => {
       if (text.length >= 32) return text.substring(0, 32);
       const padding = Math.floor((32 - text.length) / 2);
       return " ".repeat(padding) + text;
     };
-
-    // Quebra frases grandes em várias linhas de no máximo 32 caracteres
     const wrapText = (text: string, maxLength: number) => {
       const words = text.split(' ');
       let lines: string[] = [];
@@ -220,78 +216,81 @@ export default function ClientsPage() {
 
     let receipt = "";
     receipt += centerText(restaurantName.toUpperCase()) + "\n";
-    receipt += centerText("EXTRATO DE CONTA (FIADO)") + "\n";
+    // TEXTO SUAVIZADO:
+    receipt += centerText("EXTRATO DE CONSUMO") + "\n";
     receipt += separator + "\n";
 
     receipt += `CLIENTE: ${showStatementModal.name}\n`;
     receipt += `DATA EMISSAO: ${new Date().toLocaleDateString('pt-BR')}\n`;
     receipt += separator + "\n";
-
     receipt += centerText("HISTORICO RECENTE") + "\n\n";
 
-    // Adiciona o histórico ao cupom quebrando as linhas perfeitamente
     statementHistory.forEach(h => {
       const isOrder = h.type === 'order';
       const dateStr = new Date(h.date).toLocaleDateString('pt-BR');
       const typeStr = isOrder ? "COMPRA" : "PAGTO";
       
-      // Linha 1: Data e Tipo
       receipt += formatLine(dateStr, typeStr) + "\n";
 
-      // Linha 2 e 3: Descrição completa detalhada
-      const desc = h.description || (isOrder ? "Consumo" : "Abatimento");
-      const descLines = wrapText(desc, 32);
-      descLines.forEach(line => {
-          receipt += line + "\n";
-      });
+      // LAYOUT DETALHADO DOS PRODUTOS
+      if (isOrder && h.details && h.details.length > 0) {
+          h.details.forEach((item: any) => {
+              // Nome do produto
+              const nameLines = wrapText(`- ${item.product_name_snapshot.toUpperCase()}`, 32);
+              nameLines.forEach(line => receipt += line + "\n");
+              
+              // Quantidade, Preço Unitário e Total do Item
+              const price = item.product_price_snapshot || 0;
+              if (price > 0) {
+                  const unitDetails = `  ${item.quantity}x R$ ${price.toFixed(2)}`;
+                  const totalDetails = `R$ ${(price * item.quantity).toFixed(2)}`;
+                  receipt += formatLine(unitDetails, totalDetails) + "\n";
+              }
+          });
+      } else {
+          // Se for pagamento ou não tiver detalhes, imprime a descrição normal
+          const descLines = wrapText(h.description || (isOrder ? "Consumo" : "Abatimento"), 32);
+          descLines.forEach(line => receipt += line + "\n");
+      }
 
-      // Última linha: Valor alinhado à direita
+      // Total da compra ou do abatimento na data
       const amountStr = (isOrder ? "+" : "-") + ` R$ ${h.amount.toFixed(2)}`;
-      receipt += formatLine("", amountStr) + "\n\n";
+      receipt += formatLine(isOrder ? "TOTAL DO PEDIDO:" : "", amountStr) + "\n\n";
     });
 
     receipt += separator + "\n";
     
-    // Status e Total
-    const statusText = showStatementModal.balance > 0.01 ? "DEVEDOR" : "CREDOR/QUITADO";
+    // TEXTO SUAVIZADO:
+    const statusText = showStatementModal.balance > 0.01 ? "EM ABERTO" : "QUITADO";
     receipt += formatLine("SALDO ATUAL:", `R$ ${Math.abs(showStatementModal.balance).toFixed(2)}`) + "\n";
     receipt += centerText(`SITUACAO: ${statusText}`) + "\n";
-
     receipt += separator + "\n";
     receipt += centerText("Obrigado pela preferencia!") + "\n\n\n\n";
 
     const printWindow = window.open('', '_blank', 'width=400,height=600');
     if (printWindow) {
       printWindow.document.write(`
+        <!DOCTYPE html>
         <html>
           <head>
-            <title>Imprimir Comanda</title>
+            <meta charset="utf-8">
+            <title>Imprimir Extrato</title>
             <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
             <style>
               @page { margin: 0; size: 58mm auto; }
               body { 
-                /* Adicionamos fontes de Android e iOS na lista */
                 font-family: 'Courier New', Courier, 'Roboto Mono', 'Liberation Mono', monospace; 
-                width: 58mm; 
-                margin: 0; 
-                padding: 10px; 
-                font-size: 12px;
-                color: #000;
+                width: 58mm; margin: 0; padding: 10px; font-size: 12px; color: #000;
               }
-              pre { 
-                /* MUDANÇA PRINCIPAL: "pre" em vez de "pre-wrap" */
-                /* Isso obriga o celular a respeitar a NOSSA matemática de 32 colunas */
-                white-space: pre; 
-                margin: 0; 
-                font-weight: bold; 
-              }
+              pre { white-space: pre; margin: 0; font-weight: bold; }
             </style>
           </head>
           <body>
             <pre>${receipt}</pre>
             <script>
-              window.onload = function() { window.print(); }
-              window.onafterprint = function() { window.close(); }
+              setTimeout(function() {
+                window.print();
+              }, 500);
             </script>
           </body>
         </html>
