@@ -53,6 +53,23 @@ export function Header({ userRole, subtitle = 'OPERAÇÃO' }: HeaderProps) {
   const [isBackupOpen, setIsBackupOpen] = useState(false)
   const grenaColor = '#800020'
 
+  // --- LOGOFF DEFINITIVO ---
+  const handleLogoff = async () => {
+    try {
+      // 1. Limpa a sessão no Supabase
+      await supabase.auth.signOut()
+      
+      // 2. Avisa o Next.js para esquecer o cache atual
+      router.refresh()
+      
+      // 3. Força um Hard Reload na raiz, cortando o mal pela raiz!
+      window.location.href = '/'
+    } catch (error) {
+      console.error('Erro ao fazer logoff:', error)
+      alert('Erro ao sair. Atualize a página.')
+    }
+  }
+
   const btnBaseStyle = {
     borderRadius: '12px',
     padding: '10px 18px',
@@ -156,9 +173,9 @@ export function Header({ userRole, subtitle = 'OPERAÇÃO' }: HeaderProps) {
           )}
         </div>
 
-        {/* RODAPÉ */}
+        {/* RODAPÉ COM A NOVA FUNÇÃO */}
         <div style={{ marginTop: '20px', borderTop: `1px solid ${colors.border}`, paddingTop: '20px' }}>
-          <button onClick={async () => { await supabase.auth.signOut(); router.push('/') }} style={{ ...mobileBtnStyle, backgroundColor: '#fee2e2', color: '#ef4444', border: 'none', justifyContent: 'center' }}>
+          <button onClick={handleLogoff} style={{ ...mobileBtnStyle, backgroundColor: '#fee2e2', color: '#ef4444', border: 'none', justifyContent: 'center' }}>
             <IconLogout /> SAIR DO SISTEMA
           </button>
         </div>
@@ -236,7 +253,8 @@ export function Header({ userRole, subtitle = 'OPERAÇÃO' }: HeaderProps) {
               </>
             )}
 
-            <button onClick={async () => { await supabase.auth.signOut(); router.push('/') }} style={{ ...btnBaseStyle, backgroundColor: '#fee2e2', color: '#ef4444', border: 'none', marginLeft: '5px' }} title="Sair">
+            {/* BOTÃO SAIR DESKTOP COM A NOVA FUNÇÃO */}
+            <button onClick={handleLogoff} style={{ ...btnBaseStyle, backgroundColor: '#fee2e2', color: '#ef4444', border: 'none', marginLeft: '5px' }} title="Sair">
               <IconLogout />
             </button>
           </nav>
