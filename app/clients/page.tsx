@@ -187,13 +187,16 @@ export default function ClientsPage() {
   const handlePrintStatement = () => {
     if (!showStatementModal) return;
 
+    // Reduzido para 30 colunas para não cortar nas beiradas da impressora
+    const COLS = 30;
+
     const formatLine = (left: string, right: string) => {
-      const spaces = 32 - left.length - right.length;
+      const spaces = COLS - left.length - right.length;
       return left + " ".repeat(spaces > 0 ? spaces : 1) + right;
     };
     const centerText = (text: string) => {
-      if (text.length >= 32) return text.substring(0, 32);
-      const padding = Math.floor((32 - text.length) / 2);
+      if (text.length >= COLS) return text.substring(0, COLS);
+      const padding = Math.floor((COLS - text.length) / 2);
       return " ".repeat(padding) + text;
     };
     const wrapText = (text: string, maxLength: number) => {
@@ -212,11 +215,10 @@ export default function ClientsPage() {
       return lines;
     };
 
-    const separator = "-".repeat(32);
+    const separator = "-".repeat(COLS);
 
     let receipt = "";
     receipt += centerText(restaurantName.toUpperCase()) + "\n";
-    // TEXTO SUAVIZADO:
     receipt += centerText("EXTRATO DE CONSUMO") + "\n";
     receipt += separator + "\n";
 
@@ -232,14 +234,11 @@ export default function ClientsPage() {
       
       receipt += formatLine(dateStr, typeStr) + "\n";
 
-      // LAYOUT DETALHADO DOS PRODUTOS
       if (isOrder && h.details && h.details.length > 0) {
           h.details.forEach((item: any) => {
-              // Nome do produto
-              const nameLines = wrapText(`- ${item.product_name_snapshot.toUpperCase()}`, 32);
+              const nameLines = wrapText(`- ${item.product_name_snapshot.toUpperCase()}`, COLS);
               nameLines.forEach(line => receipt += line + "\n");
               
-              // Quantidade, Preço Unitário e Total do Item
               const price = item.product_price_snapshot || 0;
               if (price > 0) {
                   const unitDetails = `  ${item.quantity}x R$ ${price.toFixed(2)}`;
@@ -248,19 +247,17 @@ export default function ClientsPage() {
               }
           });
       } else {
-          // Se for pagamento ou não tiver detalhes, imprime a descrição normal
-          const descLines = wrapText(h.description || (isOrder ? "Consumo" : "Abatimento"), 32);
+          const descLines = wrapText(h.description || (isOrder ? "Consumo" : "Abatimento"), COLS);
           descLines.forEach(line => receipt += line + "\n");
       }
 
-      // Total da compra ou do abatimento na data
       const amountStr = (isOrder ? "+" : "-") + ` R$ ${h.amount.toFixed(2)}`;
-      receipt += formatLine(isOrder ? "TOTAL DO PEDIDO:" : "", amountStr) + "\n\n";
+      // Abreviei TOTAL DO PEDIDO para TOTAL PEDIDO para caber melhor nos 30 caracteres
+      receipt += formatLine(isOrder ? "TOTAL PEDIDO:" : "", amountStr) + "\n\n";
     });
 
     receipt += separator + "\n";
     
-    // TEXTO SUAVIZADO:
     const statusText = showStatementModal.balance > 0.01 ? "EM ABERTO" : "QUITADO";
     receipt += formatLine("SALDO ATUAL:", `R$ ${Math.abs(showStatementModal.balance).toFixed(2)}`) + "\n";
     receipt += centerText(`SITUACAO: ${statusText}`) + "\n";
@@ -280,9 +277,14 @@ export default function ClientsPage() {
               @page { margin: 0; size: 58mm auto; }
               body { 
                 font-family: 'Courier New', Courier, 'Roboto Mono', 'Liberation Mono', monospace; 
-                width: 58mm; margin: 0; padding: 10px; font-size: 12px; color: #000;
+                width: 58mm; 
+                margin: 0; 
+                padding: 0 4mm; /* Adicionado um respiro seguro nas laterais */
+                font-size: 11px; /* Fonte ligeiramente reduzida */
+                color: #000;
+                box-sizing: border-box;
               }
-              pre { white-space: pre; margin: 0; font-weight: bold; }
+              pre { white-space: pre-wrap; word-break: break-word; margin: 0; font-weight: bold; }
             </style>
           </head>
           <body>
@@ -410,3 +412,11 @@ export default function ClientsPage() {
     </div>
   )
 }
+
+
+
+
+
+
+
+

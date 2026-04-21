@@ -70,17 +70,24 @@ export default function ExpensesPage() {
   }
 
   const fetchExpenses = async (oid: string) => {
+    // CORREÇÃO DO BUG DO DIA 31: Calcula o último dia correto do mês selecionado
+    const [year, month] = filterMonth.split('-')
+    const lastDay = new Date(parseInt(year), parseInt(month), 0).getDate()
+
     let query = supabase
       .from('expenses')
       .select('*')
       .eq('org_id', oid)
       .gte('date', `${filterMonth}-01`)
-      .lte('date', `${filterMonth}-31`)
+      .lte('date', `${filterMonth}-${lastDay}`) // Agora usa 28, 30 ou 31 dinamicamente
       .order('date', { ascending: false })
 
     if (filterType !== 'todos') query = query.eq('type', filterType)
 
-    const { data } = await query
+    const { data, error } = await query
+    
+    // Mostra o erro no console do navegador caso o banco reclame de algo
+    if (error) console.error("Erro ao buscar despesas do Supabase:", error)
     if (data) setExpenses(data)
   }
 
@@ -111,8 +118,9 @@ export default function ExpensesPage() {
       notes: form.notes || null
     }])
 
-    if (error) { alert('Erro: ' + error.message) }
-    else {
+    if (error) { 
+      alert('Erro ao salvar no banco: ' + error.message) 
+    } else {
       setShowModal(false)
       setForm({ description: '', amount: '', category: CATEGORIAS_FIXAS[0], type: 'fixa', payment_method: 'dinheiro', date: getLocalToday(), notes: '' })
       fetchExpenses(orgId)
@@ -239,9 +247,8 @@ export default function ExpensesPage() {
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(3px)', padding: '20px' }}>
           <div style={{ background: 'white', borderRadius: '20px', padding: '30px', width: '100%', maxWidth: '460px', maxHeight: '90vh', overflowY: 'auto' }}>
             <h3 style={{ margin: '0 0 25px', color: colors.primary, fontWeight: 900, fontSize: '1.3rem' }}>Nova Despesa</h3>
-
+            
             <form onSubmit={handleSave}>
-
               {/* TIPO */}
               <div style={{ marginBottom: '18px' }}>
                 <label style={{ display: 'block', fontWeight: 700, marginBottom: '8px', fontSize: '0.9rem', color: colors.textMuted }}>Tipo *</label>
@@ -261,7 +268,7 @@ export default function ExpensesPage() {
               <div style={{ marginBottom: '18px' }}>
                 <label style={{ display: 'block', fontWeight: 700, marginBottom: '8px', fontSize: '0.9rem', color: colors.textMuted }}>Categoria *</label>
                 <select value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
-                  style={{ ...globalStyles.input, height: '48px' }}>
+                  style={{ ...globalStyles.input, height: '48px', width: '100%' }}>
                   {(form.type === 'fixa' ? CATEGORIAS_FIXAS : CATEGORIAS_VARIAVEIS).map(cat => (
                     <option key={cat} value={cat}>{cat}</option>
                   ))}
@@ -273,7 +280,7 @@ export default function ExpensesPage() {
                 <label style={{ display: 'block', fontWeight: 700, marginBottom: '8px', fontSize: '0.9rem', color: colors.textMuted }}>Descrição *</label>
                 <input required value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
                   placeholder="Ex: Conta de luz de outubro"
-                  style={{ ...globalStyles.input, padding: '12px 15px' }} />
+                  style={{ ...globalStyles.input, padding: '12px 15px', width: '100%' }} />
               </div>
 
               {/* VALOR E DATA */}
@@ -282,12 +289,12 @@ export default function ExpensesPage() {
                   <label style={{ display: 'block', fontWeight: 700, marginBottom: '8px', fontSize: '0.9rem', color: colors.textMuted }}>Valor (R$) *</label>
                   <input required type="number" step="0.01" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))}
                     placeholder="0.00"
-                    style={{ ...globalStyles.input, padding: '12px 15px' }} />
+                    style={{ ...globalStyles.input, padding: '12px 15px', width: '100%' }} />
                 </div>
                 <div style={{ flex: 1 }}>
                   <label style={{ display: 'block', fontWeight: 700, marginBottom: '8px', fontSize: '0.9rem', color: colors.textMuted }}>Data *</label>
                   <input required type="date" value={form.date} onChange={e => setForm(f => ({ ...f, date: e.target.value }))}
-                    style={{ ...globalStyles.input, padding: '12px 15px' }} />
+                    style={{ ...globalStyles.input, padding: '12px 15px', width: '100%' }} />
                 </div>
               </div>
 
@@ -315,7 +322,7 @@ export default function ExpensesPage() {
                 <textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
                   placeholder="Alguma observação importante..."
                   rows={2}
-                  style={{ ...globalStyles.input, resize: 'none', padding: '12px 15px' }} />
+                  style={{ ...globalStyles.input, resize: 'none', padding: '12px 15px', width: '100%' }} />
               </div>
 
               <div style={{ display: 'flex', gap: '12px' }}>
@@ -329,6 +336,7 @@ export default function ExpensesPage() {
                 </button>
               </div>
             </form>
+            
           </div>
         </div>
       )}

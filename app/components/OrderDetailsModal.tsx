@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState, useRef, useMemo } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { colors } from '../styles/theme'
 
@@ -8,9 +8,7 @@ const IconPen = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none
 const IconClose = () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
 const IconPrint = () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
 const IconTrash = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-const IconUser = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
 const IconCalendar = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
-const IconCheck = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
 
 // --- TIPOS ---
 type Product = { id: string, name: string, price: number, category: string, org_id: string, active: boolean, description?: string }
@@ -68,7 +66,6 @@ export function OrderDetailsModal({ orderId, label, total, onPayment, onClose, o
 
   useEffect(() => { loadData() }, [orderId])
   
-  // Scroll horizontal categorias
   useEffect(() => {
     const el = categoriesRef.current
     if (el) {
@@ -160,10 +157,8 @@ export function OrderDetailsModal({ orderId, label, total, onPayment, onClose, o
     if (error) { 
         alert(`Erro: ${error.message}`) 
     } else { 
-        // Atualiza o total da mesa no banco de dados
         const itemTotal = payload.product_price_snapshot * payload.quantity;
         await supabase.from('orders').update({ total: localTotal + itemTotal }).eq('id', orderId);
-        
         setQuantity(1); setCustomName(''); setCustomPrice(''); await loadData(); onUpdate() 
     }
   };
@@ -172,13 +167,10 @@ export function OrderDetailsModal({ orderId, label, total, onPayment, onClose, o
     if (userRole !== 'admin') { alert('🔒 Acesso Negado: Apenas gerentes podem remover itens.'); return }
     if (!confirm('Remover item?')) return;
     
-    // Identifica o item antes de deletar
     const itemToRemove = items.find(i => i.id === itemId);
-    
     const { error } = await supabase.from('order_items').delete().eq('id', itemId); 
     
     if (!error) { 
-        // Subtrai o valor da mesa no banco de dados
         if (itemToRemove) {
             const itemTotal = itemToRemove.product_price_snapshot * itemToRemove.quantity;
             await supabase.from('orders').update({ total: localTotal - itemTotal }).eq('id', orderId);
@@ -194,8 +186,6 @@ export function OrderDetailsModal({ orderId, label, total, onPayment, onClose, o
     
     await supabase.from('payments').delete().eq('order_id', orderId);
     await supabase.from('order_items').delete().eq('order_id', orderId); 
-    
-    // Zera os itens da mesa no banco, deixando apenas a taxa de entrega (se for delivery)
     await supabase.from('orders').update({ total: deliveryFee }).eq('id', orderId);
     
     await loadData(); onUpdate();
@@ -276,15 +266,17 @@ export function OrderDetailsModal({ orderId, label, total, onPayment, onClose, o
       else { await loadData(); onUpdate(); setStep('order') }
   }
 
-// --- IMPRESSÃO 58MM (32 COLUNAS COMPLETA) ---
+  // --- IMPRESSÃO 58MM COM LAYOUT AJUSTADO (30 COLUNAS) ---
   const handlePrint = () => {
+    const COLS = 30; // Margem segura
+
     const formatLine = (left: string, right: string) => {
-      const spaces = 32 - left.length - right.length;
+      const spaces = COLS - left.length - right.length;
       return left + " ".repeat(spaces > 0 ? spaces : 1) + right;
     };
     const centerText = (text: string) => {
-      if (text.length >= 32) return text.substring(0, 32);
-      const padding = Math.floor((32 - text.length) / 2);
+      if (text.length >= COLS) return text.substring(0, COLS);
+      const padding = Math.floor((COLS - text.length) / 2);
       return " ".repeat(padding) + text;
     };
     const wrapText = (text: string, maxLength: number) => {
@@ -303,7 +295,7 @@ export function OrderDetailsModal({ orderId, label, total, onPayment, onClose, o
       return lines;
     };
     
-    const separator = "-".repeat(32);
+    const separator = "-".repeat(COLS);
 
     let receipt = "";
     receipt += centerText(restaurantName.toUpperCase()) + "\n";
@@ -317,11 +309,11 @@ export function OrderDetailsModal({ orderId, label, total, onPayment, onClose, o
     
     if (deliveryInfo?.modality === 'entrega' && deliveryInfo?.address) {
       const address = `END: ${deliveryInfo.address}${deliveryInfo.neighborhood ? ', ' + deliveryInfo.neighborhood : ''}`;
-      const addressLines = wrapText(address, 32);
+      const addressLines = wrapText(address, COLS);
       addressLines.forEach(line => receipt += line + "\n");
       
       if (deliveryInfo?.reference) {
-        const refLines = wrapText(`REF: ${deliveryInfo.reference}`, 32);
+        const refLines = wrapText(`REF: ${deliveryInfo.reference}`, COLS);
         refLines.forEach(line => receipt += line + "\n");
       }
     }
@@ -329,22 +321,19 @@ export function OrderDetailsModal({ orderId, label, total, onPayment, onClose, o
     receipt += centerText("ITENS DO PEDIDO") + "\n";
     receipt += separator + "\n";
 
-    // NOVO LAYOUT DE PRODUTOS COM ESPAÇAMENTO (Unitário e Total)
     items.forEach(item => {
-      // Linha 1: Nome do produto
-      const nameLines = wrapText(item.product_name_snapshot.toUpperCase(), 32);
+      const nameLines = wrapText(item.product_name_snapshot.toUpperCase(), COLS);
       nameLines.forEach(line => receipt += line + "\n");
       
-      // Linha 2: Quantidade x Valor Unitário ...... Valor Total
       const unitDetails = `${item.quantity}x R$ ${item.product_price_snapshot.toFixed(2)}`;
       const totalDetails = `R$ ${(item.product_price_snapshot * item.quantity).toFixed(2)}`;
-      receipt += formatLine(unitDetails, totalDetails) + "\n\n"; // \n\n cria a linha em branco separadora
+      receipt += formatLine(unitDetails, totalDetails) + "\n\n";
     });
 
     receipt += separator + "\n";
     receipt += formatLine("Subtotal:", `R$ ${itemsTotal.toFixed(2)}`) + "\n";
     if (deliveryFee > 0) {
-      receipt += formatLine("Taxa de Entrega:", `R$ ${deliveryFee.toFixed(2)}`) + "\n";
+      receipt += formatLine("Taxa Entrega:", `R$ ${deliveryFee.toFixed(2)}`) + "\n";
     }
     receipt += formatLine("TOTAL DA CONTA:", `R$ ${localTotal.toFixed(2)}`) + "\n";
     
@@ -355,7 +344,7 @@ export function OrderDetailsModal({ orderId, label, total, onPayment, onClose, o
     
     if (deliveryInfo?.change) {
       receipt += separator + "\n";
-      receipt += formatLine("LEVAR TROCO PARA:", `R$ ${Number(deliveryInfo.change).toFixed(2)}`) + "\n";
+      receipt += formatLine("LEVAR TROCO:", `R$ ${Number(deliveryInfo.change).toFixed(2)}`) + "\n";
     }
 
     receipt += separator + "\n";
@@ -375,7 +364,12 @@ export function OrderDetailsModal({ orderId, label, total, onPayment, onClose, o
               @page { margin: 0; size: 58mm auto; }
               body { 
                 font-family: 'Courier New', Courier, 'Roboto Mono', 'Liberation Mono', monospace; 
-                width: 58mm; margin: 0; padding: 10px; font-size: 12px; color: #000;
+                width: 58mm; 
+                margin: 0; 
+                padding: 0 4mm;
+                font-size: 11px;
+                color: #000;
+                box-sizing: border-box;
               }
               pre { white-space: pre-wrap; word-break: break-word; margin: 0; font-weight: bold; }
             </style>
@@ -383,7 +377,6 @@ export function OrderDetailsModal({ orderId, label, total, onPayment, onClose, o
           <body>
             <pre>${receipt}</pre>
             <script>
-              // O Atraso Mágico que impede o PDF branco no PC
               setTimeout(function() {
                 window.print();
               }, 500);
@@ -395,9 +388,23 @@ export function OrderDetailsModal({ orderId, label, total, onPayment, onClose, o
     }
   }
 
-  const touchBtnBase = { cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, borderRadius: '12px', border: 'none', transition: 'transform 0.1s', minHeight: '52px', fontSize: '1rem' }
-  const qtyBtnStyle = { ...touchBtnBase, background: '#f1f5f9', color: colors.primary, fontSize: '1.8rem', flex: 1 }
-  const btnPayStyle = (bg: string) => ({ ...touchBtnBase, backgroundColor: bg, color: 'white', flexDirection: 'column' as 'column', gap: '4px', padding: '10px' })
+  // --- ESTILOS COMPARTILHADOS ---
+  const touchBtnBase: React.CSSProperties = { 
+      cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', 
+      fontWeight: 700, borderRadius: '12px', border: 'none', transition: 'transform 0.1s', 
+      minHeight: '52px', fontSize: '1rem' 
+  }
+  const qtyBtnStyle: React.CSSProperties = { 
+      ...touchBtnBase, background: '#f1f5f9', color: colors.primary, fontSize: '1.8rem', flex: 1 
+  }
+  
+  // CORREÇÃO AQUI: Assegurando que o retorno é interpretado corretamente como um CSSProperties 
+  const btnPayStyle = (bg: string): React.CSSProperties => ({ 
+      cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', 
+      fontWeight: 700, borderRadius: '12px', border: 'none', transition: 'transform 0.1s', 
+      minHeight: '52px', fontSize: '1rem',
+      backgroundColor: bg, color: 'white', flexDirection: 'column', gap: '4px', padding: '10px' 
+  })
 
   return (
     <>
@@ -418,7 +425,7 @@ export function OrderDetailsModal({ orderId, label, total, onPayment, onClose, o
             <button onClick={onClose} style={{ border: 'none', background: '#f1f5f9', width: '42px', height: '42px', borderRadius: '50%', fontSize: '1.2rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
           </div>
 
-          {/* --- TELA DE SELEÇÃO DE CLIENTE (UI NOVA) --- */}
+          {/* --- TELA DE SELEÇÃO DE CLIENTE --- */}
           {showClientSelector ? (
             <div className="slide-up" style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#fff', overflow: 'hidden' }}>
                 <div style={{ padding: '20px 20px 10px 20px', borderBottom: '1px solid #f1f5f9' }}>
@@ -482,7 +489,7 @@ export function OrderDetailsModal({ orderId, label, total, onPayment, onClose, o
                 <button onClick={() => handlePaymentSelection('cartao_credito')} style={btnPayStyle('#1d4ed8')}>💳 CRÉDITO</button>
                 
                 {/* BOTÃO FIADO DESTACADO */}
-                <button onClick={() => handlePaymentSelection('fiado')} style={{ ...btnPayStyle(orangeTheme), gridColumn: 'span 2', background: 'white', border: `2px solid ${orangeTheme}`, color: orangeTheme }}>
+                <button onClick={() => handlePaymentSelection('fiado')} style={{ ...btnPayStyle('white'), gridColumn: 'span 2', border: `2px solid ${orangeTheme}`, color: orangeTheme }}>
                     📝 COLOCAR RESTANTE NO FIADO
                 </button>
               </div>
@@ -578,7 +585,7 @@ export function OrderDetailsModal({ orderId, label, total, onPayment, onClose, o
                         </div>
                       </div>
                       <div style={{ display: 'flex', gap: '10px' }}>
-                        <button onClick={handlePrint} className="btn-grena-interactive" style={{ ...touchBtnBase, width: '55px' }} title="Imprimir Comanda"><IconPrint /></button>
+                        <button onClick={handlePrint} className="btn-grena-interactive" style={{ ...touchBtnBase, width: '55px', backgroundColor: '#f1f5f9' }} title="Imprimir Comanda"><IconPrint /></button>
                         <button onClick={() => setIsPaymentStep(true)} disabled={items.length === 0 && remainingBalance <= 0} style={{ ...touchBtnBase, padding: '0 20px', background: items.length > 0 || remainingBalance > 0 ? '#16a34a' : '#cbd5e1', color: 'white' }}>FECHAR ($)</button>
                       </div>
                     </div>
