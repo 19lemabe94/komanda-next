@@ -140,6 +140,7 @@ export default function LandingPage() {
         }
 
         @media (max-width: 480px) {
+          .mockup-title { display: none; }
           .hero-container { padding: 120px 20px 60px; }
           .hero-title { font-size: 2.2rem; }
           .steps-container { grid-template-columns: 1fr; padding: 0 20px; }
@@ -197,7 +198,7 @@ export default function LandingPage() {
                  <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#ffbd2e' }}/>
                  <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#27c93f' }}/>
                </div>
-               <span style={{ fontWeight: 600, fontSize: '0.9rem', color: luxuryBlack, display: 'none', '@media (min-width: 480px)': { display: 'block' } }}>Dashboard</span>
+               <span className="mockup-title" style={{ fontWeight: 600, fontSize: '0.9rem', color: luxuryBlack }}>Dashboard</span>
                <span style={{ fontSize: '0.8rem', color: textMuted, background: '#f5f5f5', padding: '4px 12px', borderRadius: '4px' }}>Sales by Category v</span>
             </div>
 
