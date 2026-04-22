@@ -294,7 +294,7 @@ export default function LandingPage() {
 
       {/* --- BIBLE SECTION (Serif) --- */}
       <section style={{ padding: '100px 20px', textAlign: 'center', background: 'white' }}>
-        <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: '2.5rem', fontWeight: 400, marginBottom: '40px' }}>Bible</h2>
+        <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: '2.5rem', fontWeight: 400, marginBottom: '40px' }}>-</h2>
         <p style={{ fontSize: '1.6rem', fontStyle: 'italic', fontWeight: 400, lineHeight: 1.6, fontFamily: "'Playfair Display', serif", maxWidth: '700px', margin: '0 auto 30px' }}>
           "Consagre ao Senhor tudo o que você faz, e os seus planos serão bem-sucedidos."
         </p>

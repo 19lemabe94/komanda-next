@@ -28,7 +28,7 @@ export default function ClientsPage() {
   const [totalReceivables, setTotalReceivables] = useState(0)
   const [myOrgId, setMyOrgId] = useState<string | null>(null)
   const [userRole, setUserRole] = useState<string | null>(null)
-  const [restaurantName, setRestaurantName] = useState('Meu Restaurante') // Nome para o cabeçalho do Extrato
+  const [restaurantName, setRestaurantName] = useState('Meu Restaurante') 
 
   const [showClientModal, setShowClientModal] = useState(false)
   const [editingClient, setEditingClient] = useState<Client | null>(null)
@@ -107,7 +107,7 @@ export default function ClientsPage() {
   }
 
   const handleDeleteClientWithHistory = async (client: Client) => {
-    if (!confirm(`⚠️ ATENÇÃO!\n\nIsso vai apagar TODO o histórico de "${client.name}" (compras e pagamentos) e depois excluir o cliente.\n\nEsta ação é IRREVERSÍVEL. Confirma?`)) return
+    if (!confirm(`ATENÇÃO!\n\nIsso vai apagar TODO o histórico de "${client.name}" (compras e pagamentos) e depois excluir o cliente.\n\nEsta ação é IRREVERSÍVEL. Confirma?`)) return
 
     await supabase.from('debt_payments').delete().eq('client_id', client.id)
 
@@ -125,22 +125,69 @@ export default function ClientsPage() {
     else { setShowStatementModal(null); fetchClients(myOrgId!) }
   }
 
+  // --- WHATSAPP (Formatado Clean/Minimalista) ---
   const handleShareWhatsapp = async (client: Client) => {
     const phone = client.phone?.replace(/\D/g, '')
     if (!phone || phone.length < 8) return alert('Telefone inválido para WhatsApp.')
 
+    // 1. Busca Compras
     const { data: orders } = await supabase.from('orders')
-        .select('created_at, total, order_items(quantity, product_name_snapshot)')
+        .select('id, created_at, total, order_items(quantity, product_name_snapshot, product_price_snapshot)')
         .eq('client_id', client.id).eq('status', 'concluida').eq('payment_method', 'fiado')
-        .order('created_at', { ascending: true })
 
-    let msg = `Olá *${client.name}*! 👋\nSeguem os detalhes da sua conta:\n`
-    orders?.forEach(o => {
-        const date = new Date(o.created_at).toLocaleDateString('pt-BR', {day:'2-digit', month:'2-digit'})
-        const items = o.order_items.map((i: any) => `${i.quantity}x ${i.product_name_snapshot}`).join(', ')
-        msg += `\n📅 *${date}* \n${items}\n💲 R$ ${o.total.toFixed(2)}\n`
+    // 2. Busca Pagamentos
+    const { data: payments } = await supabase.from('debt_payments')
+        .select('id, created_at, amount, notes')
+        .eq('client_id', client.id)
+
+    // 3. Junta tudo e organiza por data (mais antigos primeiro)
+    const history: HistoryItem[] = []
+    orders?.forEach((o: any) => history.push({ type: 'order', id: o.id, date: o.created_at, amount: o.total, description: '', details: o.order_items }))
+    payments?.forEach((p: any) => history.push({ type: 'payment', id: p.id, date: p.created_at, amount: p.amount, description: p.notes || 'Pagamento' }))
+    history.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+
+    // 4. Monta a Mensagem formatada
+    let msg = `*${restaurantName.toUpperCase()}*\n`
+    msg += `EXTRATO DE CONSUMO\n`
+    msg += `--------------------------------\n`
+    msg += `Cliente: ${client.name}\n`
+    msg += `Emissao: ${new Date().toLocaleDateString('pt-BR')}\n`
+    msg += `--------------------------------\n`
+    msg += `*HISTORICO RECENTE*\n\n`
+
+    if (history.length === 0) {
+        msg += `Nenhuma movimentacao.\n\n`
+    }
+
+    history.forEach(h => {
+        const dateStr = new Date(h.date).toLocaleDateString('pt-BR')
+        if (h.type === 'order') {
+            msg += `*COMPRA* - ${dateStr}\n`
+            if (h.details && h.details.length > 0) {
+                h.details.forEach((item: any) => {
+                    const price = item.product_price_snapshot || 0;
+                    const totalItem = price * item.quantity;
+                    // Linha 1: Nome do Produto e Qtd
+                    msg += `- ${item.quantity}x ${item.product_name_snapshot.toUpperCase()}\n`
+                    // Linha 2: Unidade e Total do Item
+                    msg += `  Un: R$ ${price.toFixed(2)} | Total: R$ ${totalItem.toFixed(2)}\n`
+                })
+            }
+            msg += `*Valor da Compra:* R$ ${h.amount.toFixed(2)}\n\n`
+        } else {
+            msg += `*PAGAMENTO* - ${dateStr}\n`
+            msg += `- ${h.description}\n`
+            msg += `*Valor Pago:* -R$ ${h.amount.toFixed(2)}\n\n`
+        }
     })
-    msg += `\n*TOTAL A PAGAR: R$ ${client.balance.toFixed(2)}* 💰`
+
+    const statusText = client.balance > 0.01 ? "EM ABERTO" : "QUITADO"
+    msg += `--------------------------------\n`
+    msg += `*SALDO ATUAL: R$ ${Math.abs(client.balance).toFixed(2)}*\n`
+    msg += `SITUACAO: ${statusText}\n`
+    msg += `--------------------------------\n`
+    msg += `Obrigado pela preferencia!`
+
     window.open(`https://wa.me/55${phone}?text=${encodeURIComponent(msg)}`, '_blank')
   }
 
@@ -172,7 +219,6 @@ export default function ClientsPage() {
 
   const handleOpenStatement = async (client: Client) => {
       setShowStatementModal(client); setStatementLoading(true)
-      // Atualizado: Agora busca o preço unitário (product_price_snapshot) também
       const { data: orders } = await supabase.from('orders').select('id, created_at, total, order_items(quantity, product_name_snapshot, product_price_snapshot)').eq('client_id', client.id).eq('status', 'concluida').eq('payment_method', 'fiado').order('created_at', { ascending: false })
       const { data: payments } = await supabase.from('debt_payments').select('id, created_at, amount, notes').eq('client_id', client.id).order('created_at', { ascending: false })
       
@@ -187,7 +233,6 @@ export default function ClientsPage() {
   const handlePrintStatement = () => {
     if (!showStatementModal) return;
 
-    // Reduzido para 30 colunas para não cortar nas beiradas da impressora
     const COLS = 30;
 
     const formatLine = (left: string, right: string) => {
@@ -252,7 +297,6 @@ export default function ClientsPage() {
       }
 
       const amountStr = (isOrder ? "+" : "-") + ` R$ ${h.amount.toFixed(2)}`;
-      // Abreviei TOTAL DO PEDIDO para TOTAL PEDIDO para caber melhor nos 30 caracteres
       receipt += formatLine(isOrder ? "TOTAL PEDIDO:" : "", amountStr) + "\n\n";
     });
 
@@ -279,8 +323,8 @@ export default function ClientsPage() {
                 font-family: 'Courier New', Courier, 'Roboto Mono', 'Liberation Mono', monospace; 
                 width: 58mm; 
                 margin: 0; 
-                padding: 0 4mm; /* Adicionado um respiro seguro nas laterais */
-                font-size: 11px; /* Fonte ligeiramente reduzida */
+                padding: 0 4mm;
+                font-size: 11px;
                 color: #000;
                 box-sizing: border-box;
               }
@@ -338,7 +382,6 @@ export default function ClientsPage() {
                     {client.balance > 0.01 && (
                         <>
                             <button onClick={() => handleShareWhatsapp(client)} style={{ ...touchBtnStyle, flex: 1, background: '#dcfce7', color: '#166534', border: '1px solid #22c55e' }}><IconWhatsapp /> Zap</button>
-                            {/* BOTÃO UNIFICADO PAGAR (Quitar/Abater) */}
                             <button onClick={() => openPayModal(client)} style={{ ...touchBtnStyle, flex: 1.5, background: '#16a34a', color: 'white' }}>💵 PAGAR</button>
                         </>
                     )}
@@ -359,7 +402,6 @@ export default function ClientsPage() {
             <h3 style={{ marginTop: 0, color: '#166534' }}>Receber Pagamento</h3>
             <p style={{marginBottom:'20px'}}>Cliente: <strong>{showPayModal.name}</strong></p>
             <form onSubmit={handleConfirmPayment}>
-              {/* Valor pré-preenchido para facilitar quitação, mas editável */}
               <input autoFocus type="number" step="0.01" required value={payAmount} onChange={e => setPayAmount(e.target.value)} style={{...globalStyles.input, width:'100%', marginBottom:'20px', fontSize:'2rem', textAlign:'center', color:'#166534'}} placeholder="0.00" />
               <div style={{ display: 'flex', gap: '8px', marginBottom: '25px', flexWrap: 'wrap' }}>
                   <button type="button" onClick={() => setPayMethod('pix')} style={methodBtnStyle(payMethod === 'pix', '#06b6d4')}>💠 Pix</button>
@@ -412,11 +454,3 @@ export default function ClientsPage() {
     </div>
   )
 }
-
-
-
-
-
-
-
-
