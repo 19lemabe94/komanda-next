@@ -108,7 +108,8 @@ export function OrderDetailsModal({ orderId, label, onPayment, onClose, onUpdate
       });
       txt += "-".repeat(COLS) + "\n";
       txt += formatL("TOTAL:", `R$ ${itemsTotal.toFixed(2)}`) + "\n";
-      txt += "\nOBRIGADO PELA PREFERENCIA\n\n\n\n";
+      txt += "-".repeat(COLS) + "\n";
+      txt += centerText("OBRIGADO PELA PREFERENCIA") + "\n\n\n\n";
 
       const cleanTxt = txt.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
       const encoder = new TextEncoder();
