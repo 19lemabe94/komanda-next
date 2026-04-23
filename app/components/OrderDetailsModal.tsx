@@ -75,7 +75,7 @@ export function OrderDetailsModal({ orderId, label, onPayment, onClose, onUpdate
   const itemsTotal = items.reduce((acc, item) => acc + (item.product_price_snapshot * item.quantity), 0)
   const remainingBalance = Math.max(0, itemsTotal - paidAmount)
 
-  // --- FUNÇÃO DE IMPRESSÃO WEB BLUETOOTH (CORRIGIDA) ---
+  // --- FUNÇÃO DE IMPRESSÃO WEB BLUETOOTH (ANTI-QUEBRA) ---
   const handlePrintBluetooth = async () => {
     try {
       // @ts-ignore
@@ -88,7 +88,6 @@ export function OrderDetailsModal({ orderId, label, onPayment, onClose, onUpdate
       const characteristics = await service.getCharacteristics();
       const writeChar = characteristics.find((c: any) => c.properties.write || c.properties.writeWithoutResponse);
 
-      // REDUZIDO PARA 28 COLUNAS PARA EVITAR QUEBRA
       const COLS = 28;
       const formatL = (l: string, r: string) => l + " ".repeat(Math.max(1, COLS - l.length - r.length)) + r;
       const centerText = (text: string) => { 
@@ -103,28 +102,29 @@ export function OrderDetailsModal({ orderId, label, onPayment, onClose, onUpdate
       
       items.forEach(i => {
         txt += `${i.product_name_snapshot.toUpperCase()}\n`;
-        // Ex: 1x R$5.00                R$5.00
         txt += formatL(`${i.quantity}x R$${i.product_price_snapshot.toFixed(2)}`, `R$${(i.quantity * i.product_price_snapshot).toFixed(2)}`) + "\n";
       });
       
       txt += "-".repeat(COLS) + "\n";
-      // TEXTOS MAIS CURTOS PARA NÃO QUEBRAR
-      txt += formatL("TOTAL:", `R$${itemsTotal.toFixed(2)}`) + "\n";
+      // TOTAL ALINHADO À ESQUERDA PARA NUNCA SUMIR O VALOR
+      txt += `TOTAL: R$ ${itemsTotal.toFixed(2)}\n`;
       
       if (paidAmount > 0) {
-        txt += formatL("PAGO:", `R$${paidAmount.toFixed(2)}`) + "\n";
-        txt += formatL("FALTA:", `R$${remainingBalance.toFixed(2)}`) + "\n";
+        txt += `PAGO:  R$ ${paidAmount.toFixed(2)}\n`;
+        txt += `FALTA: R$ ${remainingBalance.toFixed(2)}\n`;
       }
       
       txt += "-".repeat(COLS) + "\n";
-      txt += centerText("OBRIGADO!") + "\n\n\n\n"; // MENOR TAMBÉM
+      txt += centerText("OBRIGADO!") + "\n\n\n\n";
 
       const cleanTxt = txt.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
       const encoder = new TextEncoder();
       const bytes = encoder.encode(cleanTxt);
       
       await writeChar.writeValue(new Uint8Array([27, 64])); // Reset
-      const chunkSize = 256;
+      
+      // REDUZIDO PARA 64 BYTES (Evita perda de pacote na maquininha chinesa)
+      const chunkSize = 64;
       for (let i = 0; i < bytes.length; i += chunkSize) {
         await writeChar.writeValue(bytes.slice(i, i + chunkSize));
       }
@@ -133,7 +133,15 @@ export function OrderDetailsModal({ orderId, label, onPayment, onClose, onUpdate
     }
   };
 
-  // --- ADICIONAR ITEM COM ATUALIZAÇÃO DA TELA DE INÍCIO ---
+  // --- RECALCULAR E ATUALIZAR TELA DE INÍCIO ---
+  const updateParentTotal = async () => {
+    if (!myOrgId) return;
+    const { data: currentItems } = await supabase.from('order_items').select('product_price_snapshot, quantity').eq('order_id', orderId);
+    const calcTotal = currentItems?.reduce((acc, curr) => acc + (curr.product_price_snapshot * curr.quantity), 0) || 0;
+    await supabase.from('orders').update({ total: calcTotal }).eq('id', orderId);
+    onUpdate(); // Chama a tela de inicio pra recarregar
+  }
+
   const handleAddItem = async () => {
     if (!myOrgId) return
     let payload: any = {}
@@ -146,36 +154,19 @@ export function OrderDetailsModal({ orderId, label, onPayment, onClose, onUpdate
       payload = { order_id: orderId, product_id: p.id, quantity, org_id: myOrgId, product_name_snapshot: p.name, product_price_snapshot: p.price }
     }
     
-    // Calcula o novo total
-    const newItemTotal = payload.product_price_snapshot * payload.quantity;
-    const newTotal = itemsTotal + newItemTotal;
-
     const { error } = await supabase.from('order_items').insert([payload])
     if (!error) {
-      // Atualiza o TOTAL na tabela orders para a Tela de Início reagir
-      await supabase.from('orders').update({ total: newTotal }).eq('id', orderId);
-
       setQuantity(1); setCustomName(''); setCustomPrice(''); setSelectedProductId(''); setIsCustomMode(false);
+      await updateParentTotal();
       await loadData(); 
-      onUpdate();
     }
   }
 
-  // --- REMOVER ITEM COM ATUALIZAÇÃO DA TELA DE INÍCIO ---
   const handleRemoveItem = async (itemId: string) => {
     if (userRole !== 'admin') return alert('Apenas gerentes.')
-    
-    const itemToRemove = items.find(i => i.id === itemId);
-    if (!itemToRemove) return;
-    const newTotal = itemsTotal - (itemToRemove.product_price_snapshot * itemToRemove.quantity);
-
     await supabase.from('order_items').delete().eq('id', itemId);
-    
-    // Atualiza o TOTAL na tabela orders para a Tela de Início reagir
-    await supabase.from('orders').update({ total: newTotal }).eq('id', orderId);
-
+    await updateParentTotal();
     await loadData(); 
-    onUpdate();
   }
 
   const processPayment = async (method: string, clientId: string | null) => {
