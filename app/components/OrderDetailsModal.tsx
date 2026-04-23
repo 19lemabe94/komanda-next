@@ -18,7 +18,7 @@ type Category = { id: string, name: string }
 interface Props {
   orderId: string; 
   label: string; 
-  total?: number; // Adicionamos o total aqui novamente!
+  total?: number; 
   onPayment?: (orderId: string, amount: number, method: string, clientId?: string | null) => Promise<void>
   onClose: () => void; 
   onUpdate: () => void; 
@@ -82,7 +82,7 @@ export function OrderDetailsModal({ orderId, label, onPayment, onClose, onUpdate
   const itemsTotal = items.reduce((acc, item) => acc + (item.product_price_snapshot * item.quantity), 0)
   const remainingBalance = Math.max(0, itemsTotal - paidAmount)
 
-  // --- FUNÇÃO DE IMPRESSÃO WEB BLUETOOTH ---
+  // --- FUNÇÃO DE IMPRESSÃO WEB BLUETOOTH REVISADA ---
   const handlePrintBluetooth = async () => {
     try {
       // @ts-ignore
@@ -95,19 +95,32 @@ export function OrderDetailsModal({ orderId, label, onPayment, onClose, onUpdate
       const characteristics = await service.getCharacteristics();
       const writeChar = characteristics.find((c: any) => c.properties.write || c.properties.writeWithoutResponse);
 
-      // Montagem do Texto (30 Colunas)
+      // Funções de formatação (30 Colunas)
       const COLS = 30;
       const formatL = (l: string, r: string) => l + " ".repeat(Math.max(1, COLS - l.length - r.length)) + r;
+      const centerText = (text: string) => { 
+        if (text.length >= COLS) return text.substring(0, COLS); 
+        const padding = Math.floor((COLS - text.length) / 2); 
+        return " ".repeat(padding) + text; 
+      };
       
-      let txt = `\n${restaurantName.toUpperCase()}\n`;
-      txt += `CONTA: ${label.toUpperCase()}\n`;
+      let txt = `\n${centerText(restaurantName.toUpperCase())}\n`;
+      txt += centerText(`CONTA: ${label.toUpperCase()}`) + "\n";
       txt += "-".repeat(COLS) + "\n";
+      
       items.forEach(i => {
         txt += `${i.product_name_snapshot.toUpperCase()}\n`;
         txt += formatL(`${i.quantity}x R$${i.product_price_snapshot.toFixed(2)}`, `R$${(i.quantity * i.product_price_snapshot).toFixed(2)}`) + "\n";
       });
+      
       txt += "-".repeat(COLS) + "\n";
-      txt += formatL("TOTAL:", `R$ ${itemsTotal.toFixed(2)}`) + "\n";
+      txt += formatL("TOTAL DA CONTA:", `R$ ${itemsTotal.toFixed(2)}`) + "\n";
+      
+      if (paidAmount > 0) {
+        txt += formatL("VALOR PAGO:", `R$ ${paidAmount.toFixed(2)}`) + "\n";
+        txt += formatL("FALTA PAGAR:", `R$ ${remainingBalance.toFixed(2)}`) + "\n";
+      }
+      
       txt += "-".repeat(COLS) + "\n";
       txt += centerText("OBRIGADO PELA PREFERENCIA") + "\n\n\n\n";
 
@@ -244,7 +257,6 @@ export function OrderDetailsModal({ orderId, label, onPayment, onClose, onUpdate
               {paidAmount > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', color: '#16a34a', marginBottom: '15px', fontWeight: 600 }}><span>Já Pago</span><span>- R$ {paidAmount.toFixed(2)}</span></div>}
               
               <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
-                {/* BOTÃO DE IMPRESSÃO VIA BLUETOOTH ADICIONADO AQUI */}
                 <button onClick={handlePrintBluetooth} style={{ width: '55px', height: '55px', borderRadius: '12px', border: `1px solid ${borderLight}`, background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Imprimir Bluetooth"><IconPrint /></button>
                 <button onClick={() => setIsPaymentStep(true)} disabled={items.length === 0 && remainingBalance <= 0} style={{ flex: 1, padding: '15px', borderRadius: '12px', border: 'none', background: '#16a34a', color: '#fff', fontWeight: 700, cursor: 'pointer', textTransform: 'uppercase' }}>Receber Pagamento</button>
               </div>
@@ -268,3 +280,4 @@ export function OrderDetailsModal({ orderId, label, onPayment, onClose, onUpdate
     </div>
   )
 }
+
