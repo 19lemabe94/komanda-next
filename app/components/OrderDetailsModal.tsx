@@ -1,7 +1,6 @@
 'use client'
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
-import { colors } from '../styles/theme'
 
 // --- ÍCONES SVG ---
 const IconPen = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" /></svg>
@@ -9,7 +8,6 @@ const IconClose = () => <svg width="24" height="24" viewBox="0 0 24 24" fill="no
 const IconPrint = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
 const IconTrash = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
 const IconSearch = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-const IconBluetooth = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6.5 6.5 17.5 17.5 12 23 12 1 17.5 6.5 6.5 17.5"></polyline></svg>
 
 type OrderItem = { id: string, product_name_snapshot: string, product_price_snapshot: number, quantity: number }
 type Product = { id: string, name: string, price: number, category: string }
@@ -37,7 +35,6 @@ export function OrderDetailsModal({ orderId, label, onPayment, onClose, onUpdate
   
   const [loading, setLoading] = useState(true)
   const [isPaymentStep, setIsPaymentStep] = useState(false)
-  const [showClientSelector, setShowClientSelector] = useState(false)
   const [isCustomMode, setIsCustomMode] = useState(false)
   const [customName, setCustomName] = useState('')
   const [customPrice, setCustomPrice] = useState('')
@@ -47,8 +44,6 @@ export function OrderDetailsModal({ orderId, label, onPayment, onClose, onUpdate
   const [quantity, setQuantity] = useState(1)
   const [paidAmount, setPaidAmount] = useState(0)
   const [amountToPay, setAmountToPay] = useState('')
-  const [clients, setClients] = useState<{id: string, name: string}[]>([])
-  const [clientSearch, setClientSearch] = useState('')
 
   useEffect(() => { loadData() }, [orderId])
   
@@ -60,18 +55,16 @@ export function OrderDetailsModal({ orderId, label, onPayment, onClose, onUpdate
       const { data: profile } = await supabase.from('profiles').select('org_id').eq('id', session.user.id).single()
       if (profile?.org_id) {
         setMyOrgId(profile.org_id)
-        const [itemsRes, prodRes, catRes, payRes, clientRes, configRes] = await Promise.all([
+        const [itemsRes, prodRes, catRes, payRes, configRes] = await Promise.all([
           supabase.from('order_items').select('*').eq('order_id', orderId).order('created_at', { ascending: true }),
           supabase.from('products').select('*').eq('org_id', profile.org_id).eq('active', true).order('name'),
           supabase.from('categories').select('*').eq('org_id', profile.org_id).order('name'),
           supabase.from('payments').select('amount').eq('order_id', orderId),
-          supabase.from('clients').select('id, name').eq('org_id', profile.org_id).order('name'),
           supabase.from('menu_config').select('restaurant_name').eq('org_id', profile.org_id).single()
         ])
         if (itemsRes.data) setItems(itemsRes.data)
         if (prodRes.data) setProducts(prodRes.data)
         if (catRes.data) setCategories(catRes.data)
-        if (clientRes.data) setClients(clientRes.data)
         if (configRes.data?.restaurant_name) setRestaurantName(configRes.data.restaurant_name)
         const totalPaid = payRes.data?.reduce((acc, curr) => acc + curr.amount, 0) || 0
         setPaidAmount(totalPaid)
@@ -82,7 +75,7 @@ export function OrderDetailsModal({ orderId, label, onPayment, onClose, onUpdate
   const itemsTotal = items.reduce((acc, item) => acc + (item.product_price_snapshot * item.quantity), 0)
   const remainingBalance = Math.max(0, itemsTotal - paidAmount)
 
-  // --- FUNÇÃO DE IMPRESSÃO WEB BLUETOOTH REVISADA ---
+  // --- FUNÇÃO DE IMPRESSÃO WEB BLUETOOTH (CORRIGIDA) ---
   const handlePrintBluetooth = async () => {
     try {
       // @ts-ignore
@@ -95,8 +88,8 @@ export function OrderDetailsModal({ orderId, label, onPayment, onClose, onUpdate
       const characteristics = await service.getCharacteristics();
       const writeChar = characteristics.find((c: any) => c.properties.write || c.properties.writeWithoutResponse);
 
-      // Funções de formatação (30 Colunas)
-      const COLS = 30;
+      // REDUZIDO PARA 28 COLUNAS PARA EVITAR QUEBRA
+      const COLS = 28;
       const formatL = (l: string, r: string) => l + " ".repeat(Math.max(1, COLS - l.length - r.length)) + r;
       const centerText = (text: string) => { 
         if (text.length >= COLS) return text.substring(0, COLS); 
@@ -110,19 +103,21 @@ export function OrderDetailsModal({ orderId, label, onPayment, onClose, onUpdate
       
       items.forEach(i => {
         txt += `${i.product_name_snapshot.toUpperCase()}\n`;
+        // Ex: 1x R$5.00                R$5.00
         txt += formatL(`${i.quantity}x R$${i.product_price_snapshot.toFixed(2)}`, `R$${(i.quantity * i.product_price_snapshot).toFixed(2)}`) + "\n";
       });
       
       txt += "-".repeat(COLS) + "\n";
+      // TEXTOS MAIS CURTOS PARA NÃO QUEBRAR
       txt += formatL("TOTAL:", `R$${itemsTotal.toFixed(2)}`) + "\n";
       
       if (paidAmount > 0) {
-        txt += formatL("JA PAGO:", `R$${paidAmount.toFixed(2)}`) + "\n";
+        txt += formatL("PAGO:", `R$${paidAmount.toFixed(2)}`) + "\n";
         txt += formatL("FALTA:", `R$${remainingBalance.toFixed(2)}`) + "\n";
       }
       
       txt += "-".repeat(COLS) + "\n";
-      txt += centerText("OBRIGADO PELA PREFERENCIA") + "\n\n\n\n";
+      txt += centerText("OBRIGADO!") + "\n\n\n\n"; // MENOR TAMBÉM
 
       const cleanTxt = txt.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
       const encoder = new TextEncoder();
@@ -133,12 +128,12 @@ export function OrderDetailsModal({ orderId, label, onPayment, onClose, onUpdate
       for (let i = 0; i < bytes.length; i += chunkSize) {
         await writeChar.writeValue(bytes.slice(i, i + chunkSize));
       }
-      alert("Impressão enviada!");
     } catch (e: any) {
       alert("Erro Bluetooth: " + e.message);
     }
   };
 
+  // --- ADICIONAR ITEM COM ATUALIZAÇÃO DA TELA DE INÍCIO ---
   const handleAddItem = async () => {
     if (!myOrgId) return
     let payload: any = {}
@@ -150,17 +145,37 @@ export function OrderDetailsModal({ orderId, label, onPayment, onClose, onUpdate
       if (!p) return
       payload = { order_id: orderId, product_id: p.id, quantity, org_id: myOrgId, product_name_snapshot: p.name, product_price_snapshot: p.price }
     }
+    
+    // Calcula o novo total
+    const newItemTotal = payload.product_price_snapshot * payload.quantity;
+    const newTotal = itemsTotal + newItemTotal;
+
     const { error } = await supabase.from('order_items').insert([payload])
     if (!error) {
+      // Atualiza o TOTAL na tabela orders para a Tela de Início reagir
+      await supabase.from('orders').update({ total: newTotal }).eq('id', orderId);
+
       setQuantity(1); setCustomName(''); setCustomPrice(''); setSelectedProductId(''); setIsCustomMode(false);
-      await loadData(); onUpdate()
+      await loadData(); 
+      onUpdate();
     }
   }
 
+  // --- REMOVER ITEM COM ATUALIZAÇÃO DA TELA DE INÍCIO ---
   const handleRemoveItem = async (itemId: string) => {
     if (userRole !== 'admin') return alert('Apenas gerentes.')
-    await supabase.from('order_items').delete().eq('id', itemId)
-    await loadData(); onUpdate()
+    
+    const itemToRemove = items.find(i => i.id === itemId);
+    if (!itemToRemove) return;
+    const newTotal = itemsTotal - (itemToRemove.product_price_snapshot * itemToRemove.quantity);
+
+    await supabase.from('order_items').delete().eq('id', itemId);
+    
+    // Atualiza o TOTAL na tabela orders para a Tela de Início reagir
+    await supabase.from('orders').update({ total: newTotal }).eq('id', orderId);
+
+    await loadData(); 
+    onUpdate();
   }
 
   const processPayment = async (method: string, clientId: string | null) => {
@@ -280,4 +295,3 @@ export function OrderDetailsModal({ orderId, label, onPayment, onClose, onUpdate
     </div>
   )
 }
-
