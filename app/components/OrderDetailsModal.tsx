@@ -16,9 +16,13 @@ type Product = { id: string, name: string, price: number, category: string }
 type Category = { id: string, name: string }
 
 interface Props {
-  orderId: string; label: string;
+  orderId: string; 
+  label: string; 
+  total?: number; // Adicionamos o total aqui novamente!
   onPayment?: (orderId: string, amount: number, method: string, clientId?: string | null) => Promise<void>
-  onClose: () => void; onUpdate: () => void; userRole: string | null 
+  onClose: () => void; 
+  onUpdate: () => void; 
+  userRole: string | null 
 }
 
 export function OrderDetailsModal({ orderId, label, onPayment, onClose, onUpdate, userRole }: Props) {
