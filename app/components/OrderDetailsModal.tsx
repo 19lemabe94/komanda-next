@@ -114,11 +114,11 @@ export function OrderDetailsModal({ orderId, label, onPayment, onClose, onUpdate
       });
       
       txt += "-".repeat(COLS) + "\n";
-      txt += formatL("TOTAL DA CONTA:", `R$ ${itemsTotal.toFixed(2)}`) + "\n";
+      txt += formatL("TOTAL:", `R$${itemsTotal.toFixed(2)}`) + "\n";
       
       if (paidAmount > 0) {
-        txt += formatL("VALOR PAGO:", `R$ ${paidAmount.toFixed(2)}`) + "\n";
-        txt += formatL("FALTA PAGAR:", `R$ ${remainingBalance.toFixed(2)}`) + "\n";
+        txt += formatL("JA PAGO:", `R$${paidAmount.toFixed(2)}`) + "\n";
+        txt += formatL("FALTA:", `R$${remainingBalance.toFixed(2)}`) + "\n";
       }
       
       txt += "-".repeat(COLS) + "\n";
