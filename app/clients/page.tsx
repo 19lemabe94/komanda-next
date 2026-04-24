@@ -125,39 +125,22 @@ export default function ClientsPage() {
     else { setShowStatementModal(null); fetchClients(myOrgId!) }
   }
 
-  // --- WHATSAPP (Formatado Clean/Minimalista) ---
+  // --- WHATSAPP ---
   const handleShareWhatsapp = async (client: Client) => {
     const phone = client.phone?.replace(/\D/g, '')
     if (!phone || phone.length < 8) return alert('Telefone inválido para WhatsApp.')
 
-    // 1. Busca Compras
-    const { data: orders } = await supabase.from('orders')
-        .select('id, created_at, total, order_items(quantity, product_name_snapshot, product_price_snapshot)')
-        .eq('client_id', client.id).eq('status', 'concluida').eq('payment_method', 'fiado')
+    const { data: orders } = await supabase.from('orders').select('id, created_at, total, order_items(quantity, product_name_snapshot, product_price_snapshot)').eq('client_id', client.id).eq('status', 'concluida').eq('payment_method', 'fiado')
+    const { data: payments } = await supabase.from('debt_payments').select('id, created_at, amount, notes').eq('client_id', client.id)
 
-    // 2. Busca Pagamentos
-    const { data: payments } = await supabase.from('debt_payments')
-        .select('id, created_at, amount, notes')
-        .eq('client_id', client.id)
-
-    // 3. Junta tudo e organiza por data (mais antigos primeiro)
     const history: HistoryItem[] = []
     orders?.forEach((o: any) => history.push({ type: 'order', id: o.id, date: o.created_at, amount: o.total, description: '', details: o.order_items }))
     payments?.forEach((p: any) => history.push({ type: 'payment', id: p.id, date: p.created_at, amount: p.amount, description: p.notes || 'Pagamento' }))
     history.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
 
-    // 4. Monta a Mensagem formatada
-    let msg = `*${restaurantName.toUpperCase()}*\n`
-    msg += `EXTRATO DE CONSUMO\n`
-    msg += `--------------------------------\n`
-    msg += `Cliente: ${client.name}\n`
-    msg += `Emissao: ${new Date().toLocaleDateString('pt-BR')}\n`
-    msg += `--------------------------------\n`
-    msg += `*HISTORICO RECENTE*\n\n`
+    let msg = `*${restaurantName.toUpperCase()}*\nEXTRATO DE CONSUMO\n--------------------------------\nCliente: ${client.name}\nEmissao: ${new Date().toLocaleDateString('pt-BR')}\n--------------------------------\n*HISTORICO RECENTE*\n\n`
 
-    if (history.length === 0) {
-        msg += `Nenhuma movimentacao.\n\n`
-    }
+    if (history.length === 0) msg += `Nenhuma movimentacao.\n\n`
 
     history.forEach(h => {
         const dateStr = new Date(h.date).toLocaleDateString('pt-BR')
@@ -167,26 +150,17 @@ export default function ClientsPage() {
                 h.details.forEach((item: any) => {
                     const price = item.product_price_snapshot || 0;
                     const totalItem = price * item.quantity;
-                    // Linha 1: Nome do Produto e Qtd
-                    msg += `- ${item.quantity}x ${item.product_name_snapshot.toUpperCase()}\n`
-                    // Linha 2: Unidade e Total do Item
-                    msg += `  Un: R$ ${price.toFixed(2)} | Total: R$ ${totalItem.toFixed(2)}\n`
+                    msg += `- ${item.quantity}x ${item.product_name_snapshot.toUpperCase()}\n  Un: R$ ${price.toFixed(2)} | Total: R$ ${totalItem.toFixed(2)}\n`
                 })
             }
             msg += `*Valor da Compra:* R$ ${h.amount.toFixed(2)}\n\n`
         } else {
-            msg += `*PAGAMENTO* - ${dateStr}\n`
-            msg += `- ${h.description}\n`
-            msg += `*Valor Pago:* -R$ ${h.amount.toFixed(2)}\n\n`
+            msg += `*PAGAMENTO* - ${dateStr}\n- ${h.description}\n*Valor Pago:* -R$ ${h.amount.toFixed(2)}\n\n`
         }
     })
 
     const statusText = client.balance > 0.01 ? "EM ABERTO" : "QUITADO"
-    msg += `--------------------------------\n`
-    msg += `*SALDO ATUAL: R$ ${Math.abs(client.balance).toFixed(2)}*\n`
-    msg += `SITUACAO: ${statusText}\n`
-    msg += `--------------------------------\n`
-    msg += `Obrigado pela preferencia!`
+    msg += `--------------------------------\n*SALDO ATUAL: R$ ${Math.abs(client.balance).toFixed(2)}*\nSITUACAO: ${statusText}\n--------------------------------\nObrigado pela preferencia!`
 
     window.open(`https://wa.me/55${phone}?text=${encodeURIComponent(msg)}`, '_blank')
   }
@@ -229,119 +203,92 @@ export default function ClientsPage() {
       setStatementLoading(false)
     }
 
-// --- IMPRESSÃO 58MM DO EXTRATO ---
-  const handlePrintStatement = () => {
+  // --- IMPRESSÃO BLUETOOTH DO EXTRATO COM SEPARADOR DE DIAS ---
+  const handlePrintBluetoothStatement = async () => {
     if (!showStatementModal) return;
 
-    const COLS = 30;
-
-    const formatLine = (left: string, right: string) => {
-      const spaces = COLS - left.length - right.length;
-      return left + " ".repeat(spaces > 0 ? spaces : 1) + right;
-    };
-    const centerText = (text: string) => {
-      if (text.length >= COLS) return text.substring(0, COLS);
-      const padding = Math.floor((COLS - text.length) / 2);
-      return " ".repeat(padding) + text;
-    };
-    const wrapText = (text: string, maxLength: number) => {
-      const words = text.split(' ');
-      let lines: string[] = [];
-      let currentLine = '';
-      words.forEach(word => {
-        if ((currentLine + word).length > maxLength) {
-          lines.push(currentLine.trim());
-          currentLine = word + ' ';
-        } else {
-          currentLine += word + ' ';
-        }
+    try {
+      // @ts-ignore
+      const device = await navigator.bluetooth.requestDevice({
+        acceptAllDevices: true,
+        optionalServices: ['000018f0-0000-1000-8000-00805f9b34fb', 'e7810a71-73ae-499d-8c15-faa9aef0c3f2']
       });
-      if (currentLine) lines.push(currentLine.trim());
-      return lines;
-    };
+      const server = await device.gatt?.connect();
+      const service = await server.getPrimaryService('000018f0-0000-1000-8000-00805f9b34fb');
+      const characteristics = await service.getCharacteristics();
+      const writeChar = characteristics.find((c: any) => c.properties.write || c.properties.writeWithoutResponse);
 
-    const separator = "-".repeat(COLS);
+      const COLS = 28;
+      const formatL = (l: string, r: string) => l + " ".repeat(Math.max(1, COLS - l.length - r.length)) + r;
+      const centerText = (text: string) => { 
+        if (text.length >= COLS) return text.substring(0, COLS); 
+        const padding = Math.floor((COLS - text.length) / 2); 
+        return " ".repeat(padding) + text; 
+      };
 
-    let receipt = "";
-    receipt += centerText(restaurantName.toUpperCase()) + "\n";
-    receipt += centerText("EXTRATO DE CONSUMO") + "\n";
-    receipt += separator + "\n";
+      // Criando o separador pontilhado e espaçado (exatamente 28 colunas)
+      const spacedSeparator = "- ".repeat(Math.floor(COLS / 2)); 
 
-    receipt += `CLIENTE: ${showStatementModal.name}\n`;
-    receipt += `DATA EMISSAO: ${new Date().toLocaleDateString('pt-BR')}\n`;
-    receipt += separator + "\n";
-    receipt += centerText("HISTORICO RECENTE") + "\n\n";
+      let txt = `\n${centerText(restaurantName.toUpperCase())}\n`;
+      txt += centerText("EXTRATO DE CONSUMO") + "\n";
+      txt += "-".repeat(COLS) + "\n";
+      txt += `CLIENTE: ${showStatementModal.name.toUpperCase()}\n`;
+      txt += `DATA: ${new Date().toLocaleDateString('pt-BR')}\n`;
+      txt += "-".repeat(COLS) + "\n";
 
-    statementHistory.forEach(h => {
-      const isOrder = h.type === 'order';
-      const dateStr = new Date(h.date).toLocaleDateString('pt-BR');
-      const typeStr = isOrder ? "COMPRA" : "PAGTO";
-      
-      receipt += formatLine(dateStr, typeStr) + "\n";
+      const printHistory = [...statementHistory].reverse();
+      let lastDateStr = ""; // Variável para guardar o último dia processado
 
-      if (isOrder && h.details && h.details.length > 0) {
+      printHistory.forEach(h => {
+        const isOrder = h.type === 'order';
+        const dateStr = new Date(h.date).toLocaleDateString('pt-BR');
+        const typeStr = isOrder ? "COMPRA" : "PAGTO";
+        
+        // Verifica se virou o dia para colocar a linha pontilhada espaçada
+        if (lastDateStr !== "" && lastDateStr !== dateStr) {
+          txt += spacedSeparator + "\n";
+        }
+        lastDateStr = dateStr; // Atualiza o dia atual
+
+        txt += formatL(dateStr, typeStr) + "\n";
+
+        if (isOrder && h.details && h.details.length > 0) {
           h.details.forEach((item: any) => {
-              const nameLines = wrapText(`- ${item.product_name_snapshot.toUpperCase()}`, COLS);
-              nameLines.forEach(line => receipt += line + "\n");
-              
-              const price = item.product_price_snapshot || 0;
-              if (price > 0) {
-                  const unitDetails = `  ${item.quantity}x R$ ${price.toFixed(2)}`;
-                  const totalDetails = `R$ ${(price * item.quantity).toFixed(2)}`;
-                  receipt += formatLine(unitDetails, totalDetails) + "\n";
-              }
+            txt += `${item.product_name_snapshot.toUpperCase()}\n`;
+            const price = item.product_price_snapshot || 0;
+            if (price > 0) {
+              txt += formatL(`  ${item.quantity}x R$${price.toFixed(2)}`, `R$${(price * item.quantity).toFixed(2)}`) + "\n";
+            }
           });
-      } else {
-          const descLines = wrapText(h.description || (isOrder ? "Consumo" : "Abatimento"), COLS);
-          descLines.forEach(line => receipt += line + "\n");
+        } else {
+          const desc = h.description || (isOrder ? "Consumo" : "Pagamento");
+          txt += `${desc.substring(0, COLS)}\n`;
+        }
+
+        const amountStr = (isOrder ? "+" : "-") + `R$${h.amount.toFixed(2)}`;
+        txt += formatL(isOrder ? "VALOR:" : "PAGO:", amountStr) + "\n\n";
+      });
+
+      txt += "-".repeat(COLS) + "\n";
+      
+      const statusText = showStatementModal.balance > 0.01 ? "EM ABERTO" : "QUITADO";
+      txt += `SALDO: R$ ${Math.abs(showStatementModal.balance).toFixed(2)}\n`;
+      txt += `STATUS: ${statusText}\n`;
+      
+      txt += "-".repeat(COLS) + "\n";
+      txt += centerText("OBRIGADO!") + "\n\n\n\n";
+
+      const cleanTxt = txt.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      const encoder = new TextEncoder();
+      const bytes = encoder.encode(cleanTxt);
+      
+      await writeChar.writeValue(new Uint8Array([27, 64])); // Reset
+      const chunkSize = 64; 
+      for (let i = 0; i < bytes.length; i += chunkSize) {
+        await writeChar.writeValue(bytes.slice(i, i + chunkSize));
       }
-
-      const amountStr = (isOrder ? "+" : "-") + ` R$ ${h.amount.toFixed(2)}`;
-      receipt += formatLine(isOrder ? "TOTAL PEDIDO:" : "", amountStr) + "\n\n";
-    });
-
-    receipt += separator + "\n";
-    
-    const statusText = showStatementModal.balance > 0.01 ? "EM ABERTO" : "QUITADO";
-    receipt += formatLine("SALDO ATUAL:", `R$ ${Math.abs(showStatementModal.balance).toFixed(2)}`) + "\n";
-    receipt += centerText(`SITUACAO: ${statusText}`) + "\n";
-    receipt += separator + "\n";
-    receipt += centerText("Obrigado pela preferencia!") + "\n\n\n\n";
-
-    const printWindow = window.open('', '_blank', 'width=400,height=600');
-    if (printWindow) {
-      printWindow.document.write(`
-        <!DOCTYPE html>
-        <html>
-          <head>
-            <meta charset="utf-8">
-            <title>Imprimir Extrato</title>
-            <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-            <style>
-              @page { margin: 0; size: 58mm auto; }
-              body { 
-                font-family: 'Courier New', Courier, 'Roboto Mono', 'Liberation Mono', monospace; 
-                width: 58mm; 
-                margin: 0; 
-                padding: 0 4mm;
-                font-size: 11px;
-                color: #000;
-                box-sizing: border-box;
-              }
-              pre { white-space: pre-wrap; word-break: break-word; margin: 0; font-weight: bold; }
-            </style>
-          </head>
-          <body>
-            <pre>${receipt}</pre>
-            <script>
-              setTimeout(function() {
-                window.print();
-              }, 500);
-            </script>
-          </body>
-        </html>
-      `);
-      printWindow.document.close();
+    } catch (e: any) {
+      alert("Erro Bluetooth: " + e.message);
     }
   }
 
@@ -433,9 +380,12 @@ export default function ClientsPage() {
             </div>
             {/* RODAPÉ DO MODAL EXTRATO */}
             <div style={{padding:'15px', borderTop:'1px solid #eee', display:'flex', gap:'10px', flexWrap:'wrap'}}>
-              <button onClick={handlePrintStatement} style={{...touchBtnStyle, flex:1, background:'#fff', border:'1px solid #ccc', display:'flex', alignItems:'center', justifyContent:'center', gap:'8px'}}>
+              
+              {/* O BOTÃO MAGICO DO BLUETOOTH AQUI! */}
+              <button onClick={handlePrintBluetoothStatement} style={{...touchBtnStyle, flex:1, background:'#fff', border:'1px solid #ccc', display:'flex', alignItems:'center', justifyContent:'center', gap:'8px'}}>
                 <IconPrint /> Imprimir
               </button>
+
               <button onClick={()=>setShowStatementModal(null)} style={{...touchBtnStyle, flex:1, background:'#eee'}}>Fechar</button>
               {showStatementModal.balance > 0.01 && (
                 <button onClick={() => { setShowStatementModal(null); openPayModal(showStatementModal) }} style={{ ...touchBtnStyle, flex: 1, background: grenaColor, color: 'white' }}>QUITAR</button>

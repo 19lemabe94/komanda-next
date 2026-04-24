@@ -12,6 +12,7 @@ const IconSearch = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="n
 type OrderItem = { id: string, product_name_snapshot: string, product_price_snapshot: number, quantity: number }
 type Product = { id: string, name: string, price: number, category: string }
 type Category = { id: string, name: string }
+type Client = { id: string, name: string }
 
 interface Props {
   orderId: string; 
@@ -30,6 +31,7 @@ export function OrderDetailsModal({ orderId, label, onPayment, onClose, onUpdate
   const [items, setItems] = useState<OrderItem[]>([])
   const [products, setProducts] = useState<Product[]>([])
   const [categories, setCategories] = useState<Category[]>([]) 
+  const [clients, setClients] = useState<Client[]>([]) 
   const [myOrgId, setMyOrgId] = useState<string | null>(null)
   const [restaurantName, setRestaurantName] = useState('KOMANDAPRO')
   
@@ -39,11 +41,21 @@ export function OrderDetailsModal({ orderId, label, onPayment, onClose, onUpdate
   const [customName, setCustomName] = useState('')
   const [customPrice, setCustomPrice] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
+  const [clientSearch, setClientSearch] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('TODAS')
   const [selectedProductId, setSelectedProductId] = useState('') 
   const [quantity, setQuantity] = useState(1)
   const [paidAmount, setPaidAmount] = useState(0)
   const [amountToPay, setAmountToPay] = useState('')
+<<<<<<< HEAD
+=======
+
+  // Estados para o Drag-to-Scroll no PC
+  const categoriesRef = useRef<HTMLDivElement>(null)
+  const [isDragging, setIsDragging] = useState(false)
+  const [startX, setStartX] = useState(0)
+  const [scrollLeft, setScrollLeft] = useState(0)
+>>>>>>> 8a6c855 (feat e fix: refatoracao de relatorios kpi, blindagem de pagamento e UX drag-to-scroll)
 
   useEffect(() => { loadData() }, [orderId])
   
@@ -55,17 +67,27 @@ export function OrderDetailsModal({ orderId, label, onPayment, onClose, onUpdate
       const { data: profile } = await supabase.from('profiles').select('org_id').eq('id', session.user.id).single()
       if (profile?.org_id) {
         setMyOrgId(profile.org_id)
+<<<<<<< HEAD
         const [itemsRes, prodRes, catRes, payRes, configRes] = await Promise.all([
+=======
+        const [itemsRes, prodRes, catRes, payRes, configRes, clientsRes] = await Promise.all([
+>>>>>>> 8a6c855 (feat e fix: refatoracao de relatorios kpi, blindagem de pagamento e UX drag-to-scroll)
           supabase.from('order_items').select('*').eq('order_id', orderId).order('created_at', { ascending: true }),
           supabase.from('products').select('*').eq('org_id', profile.org_id).eq('active', true).order('name'),
           supabase.from('categories').select('*').eq('org_id', profile.org_id).order('name'),
           supabase.from('payments').select('amount').eq('order_id', orderId),
+<<<<<<< HEAD
           supabase.from('menu_config').select('restaurant_name').eq('org_id', profile.org_id).single()
+=======
+          supabase.from('menu_config').select('restaurant_name').eq('org_id', profile.org_id).single(),
+          supabase.from('clients').select('id, name').eq('org_id', profile.org_id).order('name')
+>>>>>>> 8a6c855 (feat e fix: refatoracao de relatorios kpi, blindagem de pagamento e UX drag-to-scroll)
         ])
         if (itemsRes.data) setItems(itemsRes.data)
         if (prodRes.data) setProducts(prodRes.data)
         if (catRes.data) setCategories(catRes.data)
         if (configRes.data?.restaurant_name) setRestaurantName(configRes.data.restaurant_name)
+        if (clientsRes.data) setClients(clientsRes.data)
         const totalPaid = payRes.data?.reduce((acc, curr) => acc + curr.amount, 0) || 0
         setPaidAmount(totalPaid)
       }
@@ -75,7 +97,18 @@ export function OrderDetailsModal({ orderId, label, onPayment, onClose, onUpdate
   const itemsTotal = items.reduce((acc, item) => acc + (item.product_price_snapshot * item.quantity), 0)
   const remainingBalance = Math.max(0, itemsTotal - paidAmount)
 
+<<<<<<< HEAD
   // --- FUNÇÃO DE IMPRESSÃO WEB BLUETOOTH (ANTI-QUEBRA) ---
+=======
+  const updateParentTotal = async () => {
+    if (!myOrgId) return;
+    const { data: currentItems } = await supabase.from('order_items').select('product_price_snapshot, quantity').eq('order_id', orderId);
+    const calcTotal = currentItems?.reduce((acc, curr) => acc + (curr.product_price_snapshot * curr.quantity), 0) || 0;
+    await supabase.from('orders').update({ total: calcTotal }).eq('id', orderId);
+    if (onUpdate) onUpdate(); 
+  }
+
+>>>>>>> 8a6c855 (feat e fix: refatoracao de relatorios kpi, blindagem de pagamento e UX drag-to-scroll)
   const handlePrintBluetooth = async () => {
     try {
       // @ts-ignore
@@ -106,7 +139,10 @@ export function OrderDetailsModal({ orderId, label, onPayment, onClose, onUpdate
       });
       
       txt += "-".repeat(COLS) + "\n";
+<<<<<<< HEAD
       // TOTAL ALINHADO À ESQUERDA PARA NUNCA SUMIR O VALOR
+=======
+>>>>>>> 8a6c855 (feat e fix: refatoracao de relatorios kpi, blindagem de pagamento e UX drag-to-scroll)
       txt += `TOTAL: R$ ${itemsTotal.toFixed(2)}\n`;
       
       if (paidAmount > 0) {
@@ -121,10 +157,15 @@ export function OrderDetailsModal({ orderId, label, onPayment, onClose, onUpdate
       const encoder = new TextEncoder();
       const bytes = encoder.encode(cleanTxt);
       
+<<<<<<< HEAD
       await writeChar.writeValue(new Uint8Array([27, 64])); // Reset
       
       // REDUZIDO PARA 64 BYTES (Evita perda de pacote na maquininha chinesa)
       const chunkSize = 64;
+=======
+      await writeChar.writeValue(new Uint8Array([27, 64])); 
+      const chunkSize = 64; 
+>>>>>>> 8a6c855 (feat e fix: refatoracao de relatorios kpi, blindagem de pagamento e UX drag-to-scroll)
       for (let i = 0; i < bytes.length; i += chunkSize) {
         await writeChar.writeValue(bytes.slice(i, i + chunkSize));
       }
@@ -164,22 +205,95 @@ export function OrderDetailsModal({ orderId, label, onPayment, onClose, onUpdate
 
   const handleRemoveItem = async (itemId: string) => {
     if (userRole !== 'admin') return alert('Apenas gerentes.')
+<<<<<<< HEAD
     await supabase.from('order_items').delete().eq('id', itemId);
+=======
+    await supabase.from('order_items').delete().eq('id', itemId)
+>>>>>>> 8a6c855 (feat e fix: refatoracao de relatorios kpi, blindagem de pagamento e UX drag-to-scroll)
     await updateParentTotal();
     await loadData(); 
   }
 
   const processPayment = async (method: string, clientId: string | null) => {
-    const val = parseFloat(amountToPay.replace(',', '.'))
-    if (isNaN(val) || val <= 0) return alert('Valor inválido')
-    if (onPayment) { await onPayment(orderId, val, method, clientId); onClose() }
+    
+    if (method === 'fiado' && clientId) {
+        const { error: payError } = await supabase.from('orders').update({
+            status: 'concluida',
+            payment_method: 'fiado',
+            total: itemsTotal,
+            client_id: clientId
+        }).eq('id', orderId);
+
+        if (payError) return alert('Erro ao lançar no fiado: ' + payError.message);
+
+        if (paidAmount > 0) {
+            await supabase.from('debt_payments').insert([{
+                client_id: clientId, amount: paidAmount, org_id: myOrgId, notes: 'Entrada parcial na mesa'
+            }]);
+        }
+        
+        if (onUpdate) onUpdate(); 
+        onClose();
+        return;
+    }
+
+    if (!amountToPay) return alert('Por favor, informe um valor.');
+    
+    const val = parseFloat(amountToPay.toString().replace(',', '.'));
+    if (isNaN(val) || val <= 0) return alert('Por favor, digite um valor válido.');
+
+    const isFullPayment = val >= (remainingBalance - 0.05);
+
+    const { error: payError } = await supabase.from('payments').insert([{
+      org_id: myOrgId,
+      order_id: orderId,
+      amount: val,
+      method: method
+    }]);
+
+    if (payError) return alert('Erro ao registrar pagamento: ' + payError.message);
+
+    if (isFullPayment) {
+      await supabase.from('orders').update({
+        status: 'concluida',
+        payment_method: method, 
+        total: itemsTotal
+      }).eq('id', orderId);
+      
+      if (onUpdate) onUpdate(); 
+      onClose(); 
+    } else {
+      alert(`Pagamento parcial de R$ ${val.toFixed(2)} registrado com sucesso!`);
+      setAmountToPay('');
+      setIsPaymentStep(false); 
+      await loadData();
+      if (onUpdate) onUpdate();
+    }
   }
 
+  // --- LÓGICA DE DRAG TO SCROLL (Para PC) ---
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (!categoriesRef.current) return;
+    setIsDragging(true);
+    setStartX(e.pageX - categoriesRef.current.offsetLeft);
+    setScrollLeft(categoriesRef.current.scrollLeft);
+  };
+  const handleMouseLeave = () => setIsDragging(false);
+  const handleMouseUp = () => setIsDragging(false);
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isDragging || !categoriesRef.current) return;
+    e.preventDefault();
+    const x = e.pageX - categoriesRef.current.offsetLeft;
+    const walk = (x - startX) * 2; // Velocidade da rolagem
+    categoriesRef.current.scrollLeft = scrollLeft - walk;
+  };
+
   const filteredProducts = products.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()) && (selectedCategory === 'TODAS' || p.category === selectedCategory))
+  const filteredClients = clients.filter(c => c.name.toLowerCase().includes(clientSearch.toLowerCase()))
 
   return (
     <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.7)', zIndex: 100, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', backdropFilter: 'blur(4px)' }}>
-      <style jsx global>{` .no-scrollbar::-webkit-scrollbar { display: none; } .slide-up { animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1); } @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } } `}</style>
+      <style jsx global>{` .no-scrollbar::-webkit-scrollbar { display: none; } .slide-up { animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1); } @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } } `}</style>
 
       <div className="slide-up" style={{ backgroundColor: '#fff', width: '100%', maxWidth: '550px', height: '94vh', borderTopLeftRadius: '24px', borderTopRightRadius: '24px', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         
@@ -205,7 +319,15 @@ export function OrderDetailsModal({ orderId, label, onPayment, onClose, onUpdate
                 </div>
               </div>
               {!isCustomMode && (
-                  <div className="no-scrollbar" style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '5px' }}>
+                  <div 
+                    ref={categoriesRef}
+                    className="no-scrollbar" 
+                    onMouseDown={handleMouseDown}
+                    onMouseLeave={handleMouseLeave}
+                    onMouseUp={handleMouseUp}
+                    onMouseMove={handleMouseMove}
+                    style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '5px', cursor: isDragging ? 'grabbing' : 'grab' }}
+                  >
                     <button onClick={() => setSelectedCategory('TODAS')} style={{ padding: '8px 16px', borderRadius: '20px', border: 'none', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600, background: selectedCategory === 'TODAS' ? luxuryBlack : '#f5f5f5', color: selectedCategory === 'TODAS' ? 'white' : textMuted, whiteSpace: 'nowrap' }}>Todas</button>
                     {categories.map(cat => (
                       <button key={cat.id} onClick={() => setSelectedCategory(cat.name)} style={{ padding: '8px 16px', borderRadius: '20px', border: 'none', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600, background: selectedCategory === cat.name ? luxuryBlack : '#f5f5f5', color: selectedCategory === cat.name ? 'white' : textMuted, whiteSpace: 'nowrap' }}>{cat.name}</button>
@@ -264,24 +386,78 @@ export function OrderDetailsModal({ orderId, label, onPayment, onClose, onUpdate
               
               <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
                 <button onClick={handlePrintBluetooth} style={{ width: '55px', height: '55px', borderRadius: '12px', border: `1px solid ${borderLight}`, background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Imprimir Bluetooth"><IconPrint /></button>
-                <button onClick={() => setIsPaymentStep(true)} disabled={items.length === 0 && remainingBalance <= 0} style={{ flex: 1, padding: '15px', borderRadius: '12px', border: 'none', background: '#16a34a', color: '#fff', fontWeight: 700, cursor: 'pointer', textTransform: 'uppercase' }}>Receber Pagamento</button>
+                <button 
+                  onClick={() => {
+                    setAmountToPay(remainingBalance > 0 ? remainingBalance.toFixed(2) : itemsTotal.toFixed(2));
+                    setIsPaymentStep(true);
+                  }} 
+                  disabled={items.length === 0 || remainingBalance <= 0} 
+                  style={{ flex: 1, padding: '15px', borderRadius: '12px', border: 'none', background: (items.length === 0 || remainingBalance <= 0) ? '#cbd5e1' : '#16a34a', color: 'white', fontWeight: 700, cursor: 'pointer', textTransform: 'uppercase' }}
+                >
+                  {remainingBalance <= 0 && items.length > 0 ? 'Mesa Paga' : 'Receber Pagamento'}
+                </button>
               </div>
             </div>
           </div>
         )}
 
-        {isPaymentStep && (
-            <div className="slide-up" style={{ flex: 1, padding: '30px 20px', textAlign: 'center' }}>
+        {/* TELA DE SELEÇÃO DE PAGAMENTO NORMAL */}
+        {isPaymentStep && !showClientSelector && (
+            <div className="slide-up" style={{ flex: 1, padding: '30px 20px', textAlign: 'center', display: 'flex', flexDirection: 'column' }}>
                 <h3 style={{ margin: '0 0 20px', fontSize: '1.2rem', color: luxuryBlack, fontWeight: 600 }}>Qual o valor recebido?</h3>
-                <input type="number" value={amountToPay} onChange={(e) => setAmountToPay(e.target.value)} style={{ width: '100%', padding: '20px', fontSize: '2.5rem', fontWeight: 700, textAlign: 'center', color: '#166534', border: `2px solid #166534`, borderRadius: '12px', marginBottom: '30px', outline: 'none', background: 'white' }} />
+                <input 
+                  type="number" 
+                  value={amountToPay} 
+                  onChange={(e) => setAmountToPay(e.target.value)} 
+                  style={{ width: '100%', padding: '20px', fontSize: '2.5rem', fontWeight: 700, textAlign: 'center', color: '#166534', border: `2px solid #166534`, borderRadius: '12px', marginBottom: '30px', outline: 'none', background: 'white' }} 
+                />
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
                     <button onClick={() => processPayment('pix', null)} style={{ padding: '20px', borderRadius: '12px', border: 'none', background: '#06b6d4', color: '#fff', fontWeight: 700 }}>PIX</button>
                     <button onClick={() => processPayment('dinheiro', null)} style={{ padding: '20px', borderRadius: '12px', border: 'none', background: '#22c55e', color: '#fff', fontWeight: 700 }}>DINHEIRO</button>
-                    <button onClick={() => processPayment('cartao', null)} style={{ padding: '20px', borderRadius: '12px', border: 'none', background: '#3b82f6', color: '#fff', fontWeight: 700, gridColumn: 'span 2' }}>CARTÃO</button>
+                    <button onClick={() => processPayment('cartao_debito', null)} style={{ padding: '20px', borderRadius: '12px', border: 'none', background: '#3b82f6', color: '#fff', fontWeight: 700 }}>DÉBITO</button>
+                    <button onClick={() => processPayment('cartao_credito', null)} style={{ padding: '20px', borderRadius: '12px', border: 'none', background: '#1d4ed8', color: '#fff', fontWeight: 700 }}>CRÉDITO</button>
+                    
+                    <button onClick={() => setShowClientSelector(true)} style={{ padding: '20px', borderRadius: '12px', border: `2px solid ${grenaColor}`, background: '#fff1f2', color: grenaColor, fontWeight: 800, gridColumn: 'span 2', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                      📝 LANÇAR NO FIADO
+                    </button>
                 </div>
-                <button onClick={() => setIsPaymentStep(false)} style={{ marginTop: '40px', background: 'none', border: 'none', color: textMuted, cursor: 'pointer', textDecoration: 'underline' }}>Voltar para Comanda</button>
+                
+                <button onClick={() => setIsPaymentStep(false)} style={{ marginTop: 'auto', padding: '18px', borderRadius: '12px', border: 'none', background: '#f1f5f9', color: '#475569', fontWeight: 700, cursor: 'pointer', width: '100%', transition: '0.2s' }}>
+                  Voltar para Comanda
+                </button>
             </div>
         )}
+
+        {/* TELA DE SELEÇÃO DE CLIENTE (FIADO) */}
+        {isPaymentStep && showClientSelector && (
+             <div className="slide-up" style={{ flex: 1, padding: '25px 20px', display: 'flex', flexDirection: 'column', background: '#fff' }}>
+                <h3 style={{ margin: '0 0 15px', color: luxuryBlack, fontSize: '1.2rem', fontWeight: 600 }}>Vincular Cliente</h3>
+                <input 
+                    autoFocus 
+                    placeholder="Buscar cliente..." 
+                    value={clientSearch} 
+                    onChange={e => setClientSearch(e.target.value)} 
+                    style={{ width: '100%', padding: '15px', borderRadius: '10px', border: `1px solid ${borderLight}`, fontSize: '1rem', outline: 'none', background: '#fafafa', marginBottom: '15px' }} 
+                />
+
+                <div className="no-scrollbar" style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    {filteredClients.map(client => (
+                        <button key={client.id} onClick={() => processPayment('fiado', client.id)} style={{ padding: '18px 15px', borderRadius: '10px', border: `1px solid ${borderLight}`, background: 'white', display: 'flex', alignItems: 'center', gap: '15px', cursor: 'pointer', textAlign: 'left' }}>
+                            <div style={{ width: '35px', height: '35px', borderRadius: '50%', background: '#f5f5f5', display: 'flex', alignItems: 'center', justifyContent: 'center', color: luxuryBlack, fontWeight: 700 }}>
+                              {client.name.charAt(0).toUpperCase()}
+                            </div>
+                            <span style={{ fontSize: '1rem', fontWeight: 600, color: luxuryBlack }}>{client.name}</span>
+                        </button>
+                    ))}
+                    {filteredClients.length === 0 && <div style={{ textAlign: 'center', padding: '40px', color: '#999' }}>Nenhum cliente encontrado.</div>}
+                </div>
+
+                <button onClick={() => setShowClientSelector(false)} style={{ marginTop: '20px', padding: '18px', borderRadius: '12px', border: 'none', background: '#f1f5f9', color: '#475569', fontWeight: 700, cursor: 'pointer', width: '100%' }}>
+                  Voltar aos Pagamentos
+                </button>
+            </div>
+        )}
+
       </div>
     </div>
   )
