@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { supabase } from '../lib/supabaseClient'
 
 // --- ÍCONES SVG ---
@@ -37,6 +37,7 @@ export function OrderDetailsModal({ orderId, label, onPayment, onClose, onUpdate
   
   const [loading, setLoading] = useState(true)
   const [isPaymentStep, setIsPaymentStep] = useState(false)
+  const [showClientSelector, setShowClientSelector] = useState(false)
   const [isCustomMode, setIsCustomMode] = useState(false)
   const [customName, setCustomName] = useState('')
   const [customPrice, setCustomPrice] = useState('')
@@ -47,15 +48,12 @@ export function OrderDetailsModal({ orderId, label, onPayment, onClose, onUpdate
   const [quantity, setQuantity] = useState(1)
   const [paidAmount, setPaidAmount] = useState(0)
   const [amountToPay, setAmountToPay] = useState('')
-<<<<<<< HEAD
-=======
 
   // Estados para o Drag-to-Scroll no PC
   const categoriesRef = useRef<HTMLDivElement>(null)
   const [isDragging, setIsDragging] = useState(false)
   const [startX, setStartX] = useState(0)
   const [scrollLeft, setScrollLeft] = useState(0)
->>>>>>> 8a6c855 (feat e fix: refatoracao de relatorios kpi, blindagem de pagamento e UX drag-to-scroll)
 
   useEffect(() => { loadData() }, [orderId])
   
@@ -67,21 +65,13 @@ export function OrderDetailsModal({ orderId, label, onPayment, onClose, onUpdate
       const { data: profile } = await supabase.from('profiles').select('org_id').eq('id', session.user.id).single()
       if (profile?.org_id) {
         setMyOrgId(profile.org_id)
-<<<<<<< HEAD
-        const [itemsRes, prodRes, catRes, payRes, configRes] = await Promise.all([
-=======
         const [itemsRes, prodRes, catRes, payRes, configRes, clientsRes] = await Promise.all([
->>>>>>> 8a6c855 (feat e fix: refatoracao de relatorios kpi, blindagem de pagamento e UX drag-to-scroll)
           supabase.from('order_items').select('*').eq('order_id', orderId).order('created_at', { ascending: true }),
           supabase.from('products').select('*').eq('org_id', profile.org_id).eq('active', true).order('name'),
           supabase.from('categories').select('*').eq('org_id', profile.org_id).order('name'),
           supabase.from('payments').select('amount').eq('order_id', orderId),
-<<<<<<< HEAD
-          supabase.from('menu_config').select('restaurant_name').eq('org_id', profile.org_id).single()
-=======
           supabase.from('menu_config').select('restaurant_name').eq('org_id', profile.org_id).single(),
           supabase.from('clients').select('id, name').eq('org_id', profile.org_id).order('name')
->>>>>>> 8a6c855 (feat e fix: refatoracao de relatorios kpi, blindagem de pagamento e UX drag-to-scroll)
         ])
         if (itemsRes.data) setItems(itemsRes.data)
         if (prodRes.data) setProducts(prodRes.data)
@@ -97,9 +87,6 @@ export function OrderDetailsModal({ orderId, label, onPayment, onClose, onUpdate
   const itemsTotal = items.reduce((acc, item) => acc + (item.product_price_snapshot * item.quantity), 0)
   const remainingBalance = Math.max(0, itemsTotal - paidAmount)
 
-<<<<<<< HEAD
-  // --- FUNÇÃO DE IMPRESSÃO WEB BLUETOOTH (ANTI-QUEBRA) ---
-=======
   const updateParentTotal = async () => {
     if (!myOrgId) return;
     const { data: currentItems } = await supabase.from('order_items').select('product_price_snapshot, quantity').eq('order_id', orderId);
@@ -108,7 +95,6 @@ export function OrderDetailsModal({ orderId, label, onPayment, onClose, onUpdate
     if (onUpdate) onUpdate(); 
   }
 
->>>>>>> 8a6c855 (feat e fix: refatoracao de relatorios kpi, blindagem de pagamento e UX drag-to-scroll)
   const handlePrintBluetooth = async () => {
     try {
       // @ts-ignore
@@ -139,10 +125,6 @@ export function OrderDetailsModal({ orderId, label, onPayment, onClose, onUpdate
       });
       
       txt += "-".repeat(COLS) + "\n";
-<<<<<<< HEAD
-      // TOTAL ALINHADO À ESQUERDA PARA NUNCA SUMIR O VALOR
-=======
->>>>>>> 8a6c855 (feat e fix: refatoracao de relatorios kpi, blindagem de pagamento e UX drag-to-scroll)
       txt += `TOTAL: R$ ${itemsTotal.toFixed(2)}\n`;
       
       if (paidAmount > 0) {
@@ -157,15 +139,8 @@ export function OrderDetailsModal({ orderId, label, onPayment, onClose, onUpdate
       const encoder = new TextEncoder();
       const bytes = encoder.encode(cleanTxt);
       
-<<<<<<< HEAD
-      await writeChar.writeValue(new Uint8Array([27, 64])); // Reset
-      
-      // REDUZIDO PARA 64 BYTES (Evita perda de pacote na maquininha chinesa)
-      const chunkSize = 64;
-=======
       await writeChar.writeValue(new Uint8Array([27, 64])); 
       const chunkSize = 64; 
->>>>>>> 8a6c855 (feat e fix: refatoracao de relatorios kpi, blindagem de pagamento e UX drag-to-scroll)
       for (let i = 0; i < bytes.length; i += chunkSize) {
         await writeChar.writeValue(bytes.slice(i, i + chunkSize));
       }
@@ -173,15 +148,6 @@ export function OrderDetailsModal({ orderId, label, onPayment, onClose, onUpdate
       alert("Erro Bluetooth: " + e.message);
     }
   };
-
-  // --- RECALCULAR E ATUALIZAR TELA DE INÍCIO ---
-  const updateParentTotal = async () => {
-    if (!myOrgId) return;
-    const { data: currentItems } = await supabase.from('order_items').select('product_price_snapshot, quantity').eq('order_id', orderId);
-    const calcTotal = currentItems?.reduce((acc, curr) => acc + (curr.product_price_snapshot * curr.quantity), 0) || 0;
-    await supabase.from('orders').update({ total: calcTotal }).eq('id', orderId);
-    onUpdate(); // Chama a tela de inicio pra recarregar
-  }
 
   const handleAddItem = async () => {
     if (!myOrgId) return
@@ -194,7 +160,6 @@ export function OrderDetailsModal({ orderId, label, onPayment, onClose, onUpdate
       if (!p) return
       payload = { order_id: orderId, product_id: p.id, quantity, org_id: myOrgId, product_name_snapshot: p.name, product_price_snapshot: p.price }
     }
-    
     const { error } = await supabase.from('order_items').insert([payload])
     if (!error) {
       setQuantity(1); setCustomName(''); setCustomPrice(''); setSelectedProductId(''); setIsCustomMode(false);
@@ -205,11 +170,7 @@ export function OrderDetailsModal({ orderId, label, onPayment, onClose, onUpdate
 
   const handleRemoveItem = async (itemId: string) => {
     if (userRole !== 'admin') return alert('Apenas gerentes.')
-<<<<<<< HEAD
-    await supabase.from('order_items').delete().eq('id', itemId);
-=======
     await supabase.from('order_items').delete().eq('id', itemId)
->>>>>>> 8a6c855 (feat e fix: refatoracao de relatorios kpi, blindagem de pagamento e UX drag-to-scroll)
     await updateParentTotal();
     await loadData(); 
   }
@@ -284,7 +245,7 @@ export function OrderDetailsModal({ orderId, label, onPayment, onClose, onUpdate
     if (!isDragging || !categoriesRef.current) return;
     e.preventDefault();
     const x = e.pageX - categoriesRef.current.offsetLeft;
-    const walk = (x - startX) * 2; // Velocidade da rolagem
+    const walk = (x - startX) * 2; 
     categoriesRef.current.scrollLeft = scrollLeft - walk;
   };
 
@@ -412,10 +373,10 @@ export function OrderDetailsModal({ orderId, label, onPayment, onClose, onUpdate
                   style={{ width: '100%', padding: '20px', fontSize: '2.5rem', fontWeight: 700, textAlign: 'center', color: '#166534', border: `2px solid #166534`, borderRadius: '12px', marginBottom: '30px', outline: 'none', background: 'white' }} 
                 />
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
-                    <button onClick={() => processPayment('pix', null)} style={{ padding: '20px', borderRadius: '12px', border: 'none', background: '#06b6d4', color: '#fff', fontWeight: 700 }}>PIX</button>
-                    <button onClick={() => processPayment('dinheiro', null)} style={{ padding: '20px', borderRadius: '12px', border: 'none', background: '#22c55e', color: '#fff', fontWeight: 700 }}>DINHEIRO</button>
-                    <button onClick={() => processPayment('cartao_debito', null)} style={{ padding: '20px', borderRadius: '12px', border: 'none', background: '#3b82f6', color: '#fff', fontWeight: 700 }}>DÉBITO</button>
-                    <button onClick={() => processPayment('cartao_credito', null)} style={{ padding: '20px', borderRadius: '12px', border: 'none', background: '#1d4ed8', color: '#fff', fontWeight: 700 }}>CRÉDITO</button>
+                    <button onClick={() => processPayment('pix', null)} style={{ padding: '20px', borderRadius: '12px', border: 'none', background: '#06b6d4', color: 'white', fontWeight: 700 }}>PIX</button>
+                    <button onClick={() => processPayment('dinheiro', null)} style={{ padding: '20px', borderRadius: '12px', border: 'none', background: '#22c55e', color: 'white', fontWeight: 700 }}>DINHEIRO</button>
+                    <button onClick={() => processPayment('cartao_debito', null)} style={{ padding: '20px', borderRadius: '12px', border: 'none', background: '#3b82f6', color: 'white', fontWeight: 700 }}>DÉBITO</button>
+                    <button onClick={() => processPayment('cartao_credito', null)} style={{ padding: '20px', borderRadius: '12px', border: 'none', background: '#1d4ed8', color: 'white', fontWeight: 700 }}>CRÉDITO</button>
                     
                     <button onClick={() => setShowClientSelector(true)} style={{ padding: '20px', borderRadius: '12px', border: `2px solid ${grenaColor}`, background: '#fff1f2', color: grenaColor, fontWeight: 800, gridColumn: 'span 2', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
                       📝 LANÇAR NO FIADO
